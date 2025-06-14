@@ -77,7 +77,7 @@ def main():
     # Launch Streamlit
     try:
         # Try different ports to avoid conflicts
-        for port in [8502, 8503, 8504, 8501]:
+        for port in [8501, 8503, 8504, 8502]:
             try:
                 print(f"🚀 Trying to launch on port {port}...")
                 subprocess.run([

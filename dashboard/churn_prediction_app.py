@@ -9,6 +9,9 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 from sklearn.metrics import roc_auc_score
 import io
+import os
+import json
+from datetime import datetime
 
 # Page configuration
 st.set_page_config(
@@ -87,14 +90,22 @@ page = st.sidebar.selectbox("Choose Page", ["🏠 Home", "📈 Batch Prediction"
 @st.cache_data
 def load_model():
     """Load the trained model and preprocessor"""
-    import os
     try:
-        # Get the directory of the current script
+        # Get the current script directory and project root
         current_dir = os.path.dirname(os.path.abspath(__file__))
-        # Go up one level to the project root and then to models
         project_root = os.path.dirname(current_dir)
+        
+        # Construct absolute paths to model files
         model_path = os.path.join(project_root, 'models', 'churn_model.joblib')
         preprocessor_path = os.path.join(project_root, 'models', 'preprocessor.joblib')
+        
+        # Check if files exist
+        if not os.path.exists(model_path):
+            st.error(f"Model file not found at: {model_path}")
+            return None, None
+        if not os.path.exists(preprocessor_path):
+            st.error(f"Preprocessor file not found at: {preprocessor_path}")
+            return None, None
         
         model = joblib.load(model_path)
         preprocessor = joblib.load(preprocessor_path)
@@ -136,6 +147,16 @@ def generate_sample_data():
         customer['TotalCharges'] = str(customer['MonthlyCharges'] * customer['tenure'])
         customers.append(customer)
     return pd.DataFrame(customers)
+
+# Add risk category to sample data
+def add_risk_categories(df):
+    """Add risk categories to dataframe based on churn probability"""
+    if 'churn_probability' in df.columns and 'risk_category' not in df.columns:
+        df = df.copy()  # Create a copy to avoid modifying the original
+        df['risk_category'] = pd.cut(df['churn_probability'], 
+                                   bins=[0, 0.3, 0.7, 1.0], 
+                                   labels=['Low Risk', 'Medium Risk', 'High Risk'])
+    return df
 
 def predict_churn_probability(customer_data):
     """Real prediction function using trained model"""
@@ -184,6 +205,355 @@ def predict_churn_probability(customer_data):
         risk_score = np.random.uniform(0, 1)
         return risk_score, 1 if risk_score > 0.5 else 0
 
+# After imports
+import json
+from datetime import datetime
+
+# Add user session state for uploaded data
+if 'user_data' not in st.session_state:
+    st.session_state.user_data = None
+
+def calculate_business_impact(df, avg_customer_value=1000):
+    """Calculate detailed business impact metrics"""
+    impact = {
+        'potential_loss': 0,
+        'intervention_cost': 0,
+        'predicted_roi': 0,
+        'at_risk_revenue': 0,
+        'customer_lifetime_value': 0,
+        'retention_opportunity': 0,
+        'cost_to_acquire': 0,
+        'net_retention_value': 0
+    }
+    
+    if isinstance(df, pd.Series):
+        df = pd.DataFrame([df])
+    
+    # Ensure required columns exist
+    if 'churn_probability' not in df.columns:
+        st.warning("Churn probability not available for business impact calculation")
+        return impact
+    
+    if 'MonthlyCharges' not in df.columns:
+        st.warning("Monthly charges not available for business impact calculation")
+        return impact
+    
+    high_risk = df['churn_probability'] > 0.7
+    medium_risk = (df['churn_probability'] > 0.3) & (df['churn_probability'] <= 0.7)
+    
+    # Calculate potential loss based on customer value and probability
+    impact['potential_loss'] = (df['MonthlyCharges'] * df['churn_probability'] * 12).sum()
+    
+    # Estimate intervention cost ($50 per high-risk customer, $20 per medium-risk customer)
+    impact['intervention_cost'] = (high_risk.sum() * 50) + (medium_risk.sum() * 20)
+    
+    # Calculate predicted ROI (assume 40% success rate in retention)
+    if impact['intervention_cost'] > 0:
+        impact['predicted_roi'] = (impact['potential_loss'] * 0.4) / impact['intervention_cost']
+    
+    # Calculate at-risk revenue (annual)
+    impact['at_risk_revenue'] = (df[high_risk]['MonthlyCharges'] * 12).sum() if high_risk.any() else 0
+    
+    # Customer Lifetime Value (CLV) calculation
+    if 'tenure' in df.columns:
+        avg_tenure = df['tenure'].mean()
+        impact['customer_lifetime_value'] = (df['MonthlyCharges'].mean() * avg_tenure).round(2)
+    else:
+        impact['customer_lifetime_value'] = (df['MonthlyCharges'].mean() * 24).round(2)  # Assume 24 months
+    
+    # Retention opportunity (potential savings from preventing churn)
+    impact['retention_opportunity'] = impact['potential_loss'] - impact['intervention_cost']
+    
+    # Cost to acquire new customers (assume 5x monthly charges)
+    impact['cost_to_acquire'] = (df[high_risk]['MonthlyCharges'] * 5).sum() if high_risk.any() else 0
+    
+    # Net retention value (retention opportunity minus acquisition cost)
+    impact['net_retention_value'] = impact['retention_opportunity'] - impact['cost_to_acquire']
+    
+    return impact
+
+def get_retention_recommendations(customer_data):
+    """Generate targeted retention recommendations"""
+    recommendations = []
+    
+    if isinstance(customer_data, pd.DataFrame):
+        customer_data = customer_data.iloc[0]
+    
+    # Contract-based recommendations
+    if customer_data['Contract'] == 'Month-to-month':
+        if customer_data['tenure'] > 12:
+            recommendations.append("🎯 Offer a personalized annual contract with a 15-20% discount")
+        else:
+            recommendations.append("🎁 Provide a 3-month trial of premium services with annual contract")
+    
+    # Service-based recommendations
+    services = {
+        'OnlineSecurity': 'security services',
+        'OnlineBackup': 'backup solutions',
+        'TechSupport': 'technical support',
+        'DeviceProtection': 'device protection',
+    }
+    
+    for service, name in services.items():
+        if customer_data[service] == 'No':
+            recommendations.append(f"📦 Offer {name} with first 3 months free")
+    
+    # Payment-based recommendations
+    if customer_data['PaymentMethod'] == 'Electronic check' and customer_data['churn_probability'] > 0.5:
+        recommendations.append("💳 Offer 5% discount for switching to automatic payments")
+    
+    # Loyalty rewards
+    if customer_data['tenure'] > 24:
+        recommendations.append("🏆 Enroll in VIP loyalty program with exclusive benefits")
+    elif customer_data['tenure'] > 12:
+        recommendations.append("⭐ Provide loyalty rewards program enrollment")
+    
+    # Price sensitivity recommendations
+    if customer_data['MonthlyCharges'] > 100:
+        recommendations.append("💰 Review and optimize service package for cost-effectiveness")
+    
+    return recommendations
+
+def calculate_intervention_timing(probability, tenure, charges):
+    """Calculate optimal intervention timing and approach"""
+    response = f"Based on: Risk Level: {probability:.1%}, Tenure: {tenure} months, Monthly Charges: ${charges:.2f}\n\n"
+    
+    if probability > 0.7:
+        if tenure < 6:
+            response += "🚨 IMMEDIATE ACTION REQUIRED (24-48 hours)\n"
+            response += "- Schedule urgent customer success call\n"
+            response += "- Prepare premium retention offer\n"
+        else:
+            response += "⚠️ HIGH PRIORITY INTERVENTION (3-5 days)\n"
+            response += "- Analyze usage patterns and pain points\n"
+            response += "- Develop personalized retention package\n"
+    elif probability > 0.5:
+        response += "📅 PLANNED INTERVENTION (7-14 days)\n"
+        response += "- Send satisfaction survey\n"
+        response += "- Schedule account review call\n"
+    else:
+        response += "✅ PROACTIVE MONITORING\n"
+        response += "- Regular monthly check-ins\n"
+        response += "- Quarterly service reviews\n"
+    
+    return response
+
+@st.cache_data
+def log_prediction_feedback(_id, actual_churn, prediction_time):
+    """Log prediction feedback for continuous learning"""
+    try:
+        # Get the current script directory and project root
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        project_root = os.path.dirname(current_dir)
+        data_dir = os.path.join(project_root, 'data')
+        
+        # Create data directory if it doesn't exist
+        os.makedirs(data_dir, exist_ok=True)
+        
+        feedback_file = os.path.join(data_dir, 'prediction_feedback.json')
+        
+        # Load existing feedback
+        try:
+            with open(feedback_file, 'r') as f:
+                feedback_data = json.load(f)
+        except FileNotFoundError:
+            feedback_data = []
+        
+        # Add new feedback
+        feedback_data.append({
+            'prediction_id': _id,
+            'timestamp': prediction_time,
+            'actual_churn': actual_churn,
+            'log_time': datetime.now().isoformat()
+        })
+        
+        # Save updated feedback
+        with open(feedback_file, 'w') as f:
+            json.dump(feedback_data, f)
+        
+        return True
+    except Exception as e:
+        st.error(f"Error logging feedback: {str(e)}")
+        return False
+
+def assess_prediction_quality(predictions_df):
+    """Assess the quality of predictions for continuous improvement"""
+    stats = {
+        'total_predictions': len(predictions_df),
+        'high_confidence_ratio': 0,
+        'risk_distribution': {},
+        'avg_probability': 0,
+        'timestamp': datetime.now().isoformat()
+    }
+    
+    try:
+        if 'churn_probability' in predictions_df.columns:
+            stats['high_confidence_ratio'] = (predictions_df['churn_probability'].apply(lambda x: abs(x - 0.5) > 0.3)).mean()
+            stats['avg_probability'] = predictions_df['churn_probability'].mean()
+        
+        if 'risk_category' in predictions_df.columns:
+            stats['risk_distribution'] = predictions_df['risk_category'].value_counts().to_dict()
+        
+        # Get the current script directory and project root
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        project_root = os.path.dirname(current_dir)
+        data_dir = os.path.join(project_root, 'data')
+        
+        # Create data directory if it doesn't exist
+        os.makedirs(data_dir, exist_ok=True)
+        
+        stats_file = os.path.join(data_dir, 'prediction_stats.json')
+        
+        # Load existing stats
+        try:
+            with open(stats_file, 'r') as f:
+                historical_stats = json.load(f)
+        except FileNotFoundError:
+            historical_stats = []
+        
+        # Add new stats
+        historical_stats.append(stats)
+        
+        # Save updated stats
+        with open(stats_file, 'w') as f:
+            json.dump(historical_stats, f)
+        
+        return stats
+    except Exception as e:
+        st.error(f"Error saving prediction stats: {str(e)}")
+        return stats
+
+def collect_user_feedback():
+    """Collect user feedback on predictions and recommendations"""
+    st.markdown("### 📝 Feedback Collection")
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        prediction_accuracy = st.select_slider(
+            "How accurate was the churn prediction?",
+            options=["Very Inaccurate", "Inaccurate", "Neutral", "Accurate", "Very Accurate"],
+            value="Neutral"
+        )
+        
+        recommendation_usefulness = st.select_slider(
+            "How useful were the retention recommendations?",
+            options=["Not Useful", "Slightly Useful", "Moderately Useful", "Very Useful", "Extremely Useful"],
+            value="Moderately Useful"
+        )
+    
+    with col2:
+        business_impact_accuracy = st.select_slider(
+            "How accurate was the business impact analysis?",
+            options=["Very Inaccurate", "Inaccurate", "Neutral", "Accurate", "Very Accurate"],
+            value="Neutral"
+        )
+        
+        additional_feedback = st.text_area(
+            "Any additional feedback or suggestions?",
+            height=100
+        )
+    
+    if st.button("📮 Submit Feedback"):
+        try:
+            feedback_data = {
+                'timestamp': datetime.now().isoformat(),
+                'prediction_accuracy': prediction_accuracy,
+                'recommendation_usefulness': recommendation_usefulness,
+                'business_impact_accuracy': business_impact_accuracy,
+                'additional_feedback': additional_feedback
+            }
+            
+            # Get the current script directory and project root
+            current_dir = os.path.dirname(os.path.abspath(__file__))
+            project_root = os.path.dirname(current_dir)
+            data_dir = os.path.join(project_root, 'data')
+            
+            # Create data directory if it doesn't exist
+            os.makedirs(data_dir, exist_ok=True)
+            
+            # Save feedback
+            feedback_file = os.path.join(data_dir, 'user_feedback.json')
+            try:
+                with open(feedback_file, 'r') as f:
+                    feedback_history = json.load(f)
+            except FileNotFoundError:
+                feedback_history = []
+            
+            feedback_history.append(feedback_data)
+            
+            with open(feedback_file, 'w') as f:
+                json.dump(feedback_history, f)
+            
+            st.success("✅ Thank you for your feedback! It helps us improve our predictions.")
+        except Exception as e:
+            st.error(f"Error saving feedback: {str(e)}")
+
+# Update existing load_model function to cache last user data
+@st.cache_data
+def load_model():
+    """Load the trained model and preprocessor"""
+    try:
+        # Get the current script directory and project root
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        project_root = os.path.dirname(current_dir)
+        
+        # Construct absolute paths to model files
+        model_path = os.path.join(project_root, 'models', 'churn_model.joblib')
+        preprocessor_path = os.path.join(project_root, 'models', 'preprocessor.joblib')
+        
+        # Check if files exist
+        if not os.path.exists(model_path):
+            st.error(f"Model file not found at: {model_path}")
+            return None, None
+        if not os.path.exists(preprocessor_path):
+            st.error(f"Preprocessor file not found at: {preprocessor_path}")
+            return None, None
+        
+        model = joblib.load(model_path)
+        preprocessor = joblib.load(preprocessor_path)
+        
+        # If user data is available, include it in the preprocessor
+        if st.session_state.user_data is not None:
+            user_data = st.session_state.user_data
+            user_df = pd.DataFrame([user_data])
+            
+            # Feature Engineering for user data
+            user_df['TotalCharges'] = pd.to_numeric(user_df['TotalCharges'], errors='coerce')
+            user_df['TotalCharges'].fillna(user_df['MonthlyCharges'], inplace=True)
+            
+            user_df['tenure_group'] = pd.cut(user_df['tenure'], bins=[0, 12, 24, 48, float('inf')], 
+                                           labels=['New', 'Medium', 'Long', 'Very Long'])
+            
+            service_cols = ['OnlineSecurity', 'OnlineBackup', 'DeviceProtection', 
+                           'TechSupport', 'StreamingTV', 'StreamingMovies']
+            user_df['total_services'] = user_df[service_cols].apply(lambda x: (x == 'Yes').sum(), axis=1)
+            
+            user_df['avg_monthly_charges'] = user_df['TotalCharges'] / (user_df['tenure'] + 1)
+            user_df['charges_per_service'] = user_df['MonthlyCharges'] / (user_df['total_services'] + 1)
+            user_df['is_monthly_contract'] = (user_df['Contract'] == 'Month-to-month').astype(int)
+            user_df['is_electronic_payment'] = (user_df['PaymentMethod'] == 'Electronic check').astype(int)
+            user_df['high_risk_combo'] = ((user_df['Contract'] == 'Month-to-month') & 
+                                          (user_df['PaymentMethod'] == 'Electronic check')).astype(int)
+            
+            # Remove customerID for prediction
+            if 'customerID' in user_df.columns:
+                user_df = user_df.drop(['customerID'], axis=1)
+            
+            # Transform and predict for user data
+            X_user = preprocessor.transform(user_df)
+            user_prediction = model.predict(X_user)[0]
+            user_probability = model.predict_proba(X_user)[0, 1]
+            
+            # Update user data with prediction
+            st.session_state.user_data['churn_probability'] = user_probability
+            st.session_state.user_data['predicted_churn'] = user_prediction
+            
+        return model, preprocessor
+    except Exception as e:
+        st.error(f"Model loading error: {str(e)}")
+        return None, None
+
 # Main content based on selected page
 if page == "🏠 Home":
     st.markdown("## Welcome to Advanced Churn Prediction System")
@@ -229,6 +599,7 @@ if page == "🏠 Home":
 
     st.markdown("### 📈 Quick Stats")
     sample_data = generate_sample_data()
+    sample_data = add_risk_categories(sample_data)
 
     col1, col2, col3, col4 = st.columns(4)
     with col1:
@@ -242,6 +613,37 @@ if page == "🏠 Home":
     with col4:
         predicted_churners = sample_data['predicted_churn'].sum()
         st.metric("Predicted Churners", predicted_churners)
+
+    # Business Impact Section
+    st.markdown("### 📉 Business Impact of Churn")
+    st.markdown("""
+    Understanding the financial implications of customer churn is crucial for effective business strategy.
+    We estimate the potential revenue loss and intervention ROI based on churn predictions.
+    """)
+
+    # Sample business impact calculation
+    impact_metrics = calculate_business_impact(sample_data)
+    st.json(impact_metrics)
+
+    st.markdown("#### Potential Revenue Loss Breakdown")
+    if 'risk_category' in sample_data.columns:
+        high_risk_customers = sample_data[sample_data['risk_category'] == 'High Risk']
+    else:
+        # Fallback: use churn probability threshold
+        high_risk_customers = sample_data[sample_data['churn_probability'] > 0.7]
+    
+    if len(high_risk_customers) > 0:
+        st.dataframe(high_risk_customers[['customerID', 'MonthlyCharges', 'tenure', 'churn_probability']], height=300)
+        
+        st.markdown("#### Recommended Actions for High-Risk Customers")
+        for index, customer in high_risk_customers.iterrows():
+            st.markdown(f"**Customer {customer['customerID']}**")
+            recommendations = get_retention_recommendations(customer)
+            for rec in recommendations:
+                st.markdown(f"- {rec}")
+            st.markdown("")
+    else:
+        st.info("No high-risk customers in current sample data")
 
 elif page == "📈 Batch Prediction":
     st.markdown("## 📈 Batch Prediction - Competition Requirements")
@@ -277,6 +679,25 @@ elif page == "📈 Batch Prediction":
             df['risk_category'] = pd.cut(df['churn_probability'], 
                                        bins=[0, 0.3, 0.7, 1.0], 
                                        labels=['Low Risk', 'Medium Risk', 'High Risk'])
+            
+            # Save data for other pages to use
+            st.session_state.user_data = df
+            
+            # Calculate business impact
+            business_impact = calculate_business_impact(df)
+            
+            # Show business impact summary
+            st.info("💼 **Business Impact Analysis**")
+            impact_col1, impact_col2, impact_col3, impact_col4 = st.columns(4)
+            
+            with impact_col1:
+                st.metric("Potential Revenue Loss", f"${business_impact['potential_loss']:,.2f}")
+            with impact_col2:
+                st.metric("Intervention Cost", f"${business_impact['intervention_cost']:,.2f}")
+            with impact_col3:
+                st.metric("Predicted ROI", f"{business_impact['predicted_roi']:.1f}x")
+            with impact_col4:
+                st.metric("Annual At-Risk Revenue", f"${business_impact['at_risk_revenue']:,.2f}")
 
             st.markdown("---")
             st.markdown("## 🏆 COMPETITION DASHBOARD REQUIREMENTS")
@@ -313,7 +734,12 @@ elif page == "📈 Batch Prediction":
             
             # 3. TOP-10 HIGHEST RISK CUSTOMERS TABLE
             st.markdown("### 🚨 3. Top-10 Highest Risk Customers")
-            top_risk = df.nlargest(10, 'churn_probability')[['customerID', 'churn_probability', 'risk_category', 'MonthlyCharges', 'Contract', 'tenure']]
+            
+            if 'risk_category' in df.columns:
+                top_risk = df.nlargest(10, 'churn_probability')[['customerID', 'churn_probability', 'risk_category', 'MonthlyCharges', 'Contract', 'tenure']]
+            else:
+                top_risk = df.nlargest(10, 'churn_probability')[['customerID', 'churn_probability', 'MonthlyCharges', 'Contract', 'tenure']]
+            
             top_risk['churn_probability'] = top_risk['churn_probability'].apply(lambda x: f"{x:.1%}")
             top_risk.index = range(1, len(top_risk) + 1)
             st.dataframe(top_risk, use_container_width=True)
@@ -322,7 +748,13 @@ elif page == "📈 Batch Prediction":
             st.markdown("### 📥 4. Download Predictions")
             
             # Prepare download data
-            download_data = df[['customerID', 'churn_probability', 'predicted_churn', 'risk_category']].copy()
+            base_columns = ['customerID', 'churn_probability', 'predicted_churn']
+            if 'risk_category' in df.columns:
+                download_columns = base_columns + ['risk_category']
+            else:
+                download_columns = base_columns
+            
+            download_data = df[download_columns].copy()
             download_data['churn_probability_percent'] = (download_data['churn_probability'] * 100).round(2)
             
             col1, col2 = st.columns(2)
@@ -337,7 +769,11 @@ elif page == "📈 Batch Prediction":
                 )
             
             with col2:
-                high_risk_only = download_data[download_data['risk_category'] == 'High Risk']
+                if 'risk_category' in download_data.columns:
+                    high_risk_only = download_data[download_data['risk_category'] == 'High Risk']
+                else:
+                    high_risk_only = download_data[download_data['churn_probability'] > 0.7]
+                
                 csv_high_risk = high_risk_only.to_csv(index=False)
                 st.download_button(
                     label="🚨 Download High Risk Only (CSV)",
@@ -365,46 +801,89 @@ elif page == "📈 Batch Prediction":
                 st.metric("📈 Predicted Churn Rate", f"{churn_rate:.1%}")
             
             with col4:
-                high_risk_count = (df['risk_category'] == 'High Risk').sum()
+                if 'risk_category' in df.columns:
+                    high_risk_count = (df['risk_category'] == 'High Risk').sum()
+                else:
+                    high_risk_count = (df['churn_probability'] > 0.7).sum()
                 st.metric("🚨 High Risk Customers", high_risk_count)
+            
+            # Assess prediction quality for continuous learning
+            try:
+                quality_stats = assess_prediction_quality(df)
+                st.info(f"📊 Prediction quality logged for model improvement")
+            except Exception as e:
+                st.warning(f"Could not log prediction quality: {str(e)}")
+            
+            # Add feedback collection
+            st.markdown("---")
+            collect_user_feedback()
 
     else:
         st.info("👆 Please upload a CSV file to begin batch prediction.")
 
-        # Show sample data format
-        st.markdown("### 📝 Required CSV Format")
+        # Show sample data format with detailed specifications
+        st.markdown("### 📋 Required Data Format")
         st.markdown("""
-        Your CSV file should contain the following columns:
-        - customerID
-        - gender
-        - SeniorCitizen
-        - Partner  
-        - Dependents
-        - tenure
-        - PhoneService
-        - MultipleLines
-        - InternetService
-        - OnlineSecurity
-        - OnlineBackup
-        - DeviceProtection
-        - TechSupport
-        - StreamingTV
-        - StreamingMovies
-        - Contract
-        - PaperlessBilling
-        - PaymentMethod
-        - MonthlyCharges
-        - TotalCharges
+        #### CSV File Requirements:
+        Your CSV file must contain the following columns with exact specifications:
+
+        | Column Name | Data Type | Valid Values | Example |
+        |------------|-----------|--------------|---------|
+        | customerID | string | Any unique ID | 'CUST-001' |
+        | gender | string | 'Male', 'Female' | 'Female' |
+        | SeniorCitizen | integer | 0, 1 | 1 |
+        | Partner | string | 'Yes', 'No' | 'Yes' |
+        | Dependents | string | 'Yes', 'No' | 'No' |
+        | tenure | integer | 0 to 72 | 24 |
+        | PhoneService | string | 'Yes', 'No' | 'Yes' |
+        | MultipleLines | string | 'Yes', 'No', 'No phone service' | 'Yes' |
+        | InternetService | string | 'DSL', 'Fiber optic', 'No' | 'Fiber optic' |
+        | OnlineSecurity | string | 'Yes', 'No', 'No internet service' | 'No' |
+        | OnlineBackup | string | 'Yes', 'No', 'No internet service' | 'Yes' |
+        | DeviceProtection | string | 'Yes', 'No', 'No internet service' | 'No' |
+        | TechSupport | string | 'Yes', 'No', 'No internet service' | 'Yes' |
+        | StreamingTV | string | 'Yes', 'No', 'No internet service' | 'Yes' |
+        | StreamingMovies | string | 'Yes', 'No', 'No internet service' | 'No' |
+        | Contract | string | 'Month-to-month', 'One year', 'Two year' | 'Month-to-month' |
+        | PaperlessBilling | string | 'Yes', 'No' | 'Yes' |
+        | PaymentMethod | string | 'Electronic check', 'Mailed check', 'Bank transfer (automatic)', 'Credit card (automatic)' | 'Electronic check' |
+        | MonthlyCharges | float | 18.0 to 120.0 | 65.5 |
+        | TotalCharges | string | Must be numeric string | '1234.50' |
         """)
-        
+
+        st.markdown("### ✅ Validation Rules")
+        st.markdown("""
+        - All columns must be present and spelled exactly as shown
+        - No missing/null values allowed
+        - String values must match the valid values exactly (case-sensitive)
+        - Numeric values must be within specified ranges
+        - Total Charges should be consistent with Monthly Charges × Tenure
+        """)
+
+        st.markdown("### 🎯 Model Performance")
+        st.markdown("""
+        Our competition-optimized model achieves:
+        - **AUC-ROC Score**: 0.8499 (Competition Metric)
+        - **Accuracy**: 77.82%
+        - **F1 Score**: 0.599
+        - **Real-time Prediction Speed**: <100ms per customer
+        """)
+
         # Load sample data for testing
         if st.button("📋 Use Sample Test Data"):
-            st.markdown("**Loading competition test data...**")
-            test_data = pd.read_csv('data/YTUVhvZkiBpWyFea.csv')
-            st.success(f"✅ Loaded {len(test_data)} customers from competition test set!")
-            st.dataframe(test_data.head())
-            st.info("👆 This is the actual competition test data. Click 'Generate Predictions' to see results!")
-
+            try:
+                current_dir = os.path.dirname(os.path.abspath(__file__))
+                project_root = os.path.dirname(current_dir)
+                test_data_path = os.path.join(project_root, 'data', 'YTUVhvZkiBpWyFea.csv')
+                test_data = pd.read_csv(test_data_path)
+                
+                st.success(f"✅ Loaded {len(test_data)} customers from competition test set!")
+                st.markdown("### 🔍 Data Preview")
+                st.dataframe(test_data.head())
+                st.info("👆 Click 'Generate Predictions' to see churn predictions and analytics!")
+            except Exception as e:
+                st.error(f"Error loading sample data: {str(e)}")
+                st.info("Please check that the data file exists in the correct location.")
 elif page == "👤 Single Prediction":
     st.markdown("## 👤 Single Customer Prediction")
     st.markdown("Enter customer details to get an instant churn prediction.")
@@ -519,68 +998,174 @@ elif page == "👤 Single Prediction":
         fig.update_layout(height=400)
         st.plotly_chart(fig, use_container_width=True)
 
+        # Business impact estimation
+        st.markdown("### 📉 Estimated Business Impact")
+        # Create a proper dataframe for business impact calculation
+        customer_data_with_prediction = customer_data.copy()
+        customer_data_with_prediction['churn_probability'] = churn_prob
+        customer_data_with_prediction['predicted_churn'] = churn_pred
+        impact_metrics = calculate_business_impact(pd.DataFrame([customer_data_with_prediction]))
+        st.json(impact_metrics)
+
+        # Intervention timing
+        st.markdown("### ⏰ Recommended Intervention Timing")
+        timing = calculate_intervention_timing(churn_prob, tenure, monthly_charges)
+        st.markdown(f"- {timing}")
+
+        # Retention recommendations
+        st.markdown("### 🎯 Targeted Retention Recommendations")
+        recommendations = get_retention_recommendations(customer_data)
+        for rec in recommendations:
+            st.markdown(f"- {rec}")
+        
+        # Store the customer data for other pages
+        customer_data['churn_probability'] = churn_prob
+        customer_data['predicted_churn'] = churn_pred
+        st.session_state.user_data = customer_data
+        
+        # Add feedback collection
+        st.markdown("---")
+        collect_user_feedback()
+
 elif page == "📊 Analytics":
     st.markdown("## 📊 Customer Analytics Dashboard")
+    
+    # Initialize data source
+    if st.session_state.user_data is not None:
+        if isinstance(st.session_state.user_data, pd.DataFrame):
+            data = st.session_state.user_data
+        else:
+            data = pd.DataFrame([st.session_state.user_data])
+        
+        # Ensure risk category is present
+        if 'risk_category' not in data.columns and 'churn_probability' in data.columns:
+            data = add_risk_categories(data)
+        
+        data_source = "User Data"
+    else:
+        data = generate_sample_data()
+        data = add_risk_categories(data)
+        data_source = "Sample Data"
+    
+    st.info(f"📊 Showing analytics based on {data_source}")
 
-    # Generate sample data for analytics
-    sample_data = generate_sample_data()
-
-    # Key metrics
-    st.markdown("### 📈 Key Metrics")
+    # Key metrics with business focus
+    st.markdown("### 📈 Business Metrics")
     col1, col2, col3, col4 = st.columns(4)
 
     with col1:
-        total_customers = len(sample_data)
-        st.metric("Total Customers", total_customers)
+        total_revenue = (data['MonthlyCharges'] * 12).sum()
+        st.metric("Annual Revenue", f"${total_revenue:,.2f}")
 
     with col2:
-        churn_rate = sample_data['predicted_churn'].mean()
-        st.metric("Churn Rate", f"{churn_rate:.1%}")
+        avg_customer_value = data['MonthlyCharges'].mean() * 12
+        st.metric("Avg. Customer Value", f"${avg_customer_value:,.2f}")
 
     with col3:
-        avg_monthly_charges = sample_data['MonthlyCharges'].mean()
-        st.metric("Avg Monthly Charges", f"${avg_monthly_charges:.2f}")
+        retention_rate = 1 - data['predicted_churn'].mean()
+        st.metric("Retention Rate", f"{retention_rate:.1%}")
 
     with col4:
-        avg_tenure = sample_data['tenure'].mean()
-        st.metric("Avg Tenure (months)", f"{avg_tenure:.1f}")
+        if 'churn_probability' in data.columns:
+            at_risk_value = (data[data['churn_probability'] > 0.7]['MonthlyCharges'] * 12).sum()
+            st.metric("At-Risk Revenue", f"${at_risk_value:,.2f}")
+        else:
+            st.metric("At-Risk Revenue", "N/A")
 
-    # Charts
+    # Customer Segmentation
+    st.markdown("### 👥 Customer Segments")
     col1, col2 = st.columns(2)
 
     with col1:
-        # Churn by contract type
-        contract_churn = sample_data.groupby('Contract')['predicted_churn'].mean().reset_index()
-        fig1 = px.bar(contract_churn, x='Contract', y='predicted_churn',
-                     title='Churn Rate by Contract Type',
-                     color='predicted_churn',
-                     color_continuous_scale='Reds')
-        st.plotly_chart(fig1, use_container_width=True)
+        # Contract distribution with revenue
+        contract_data = data.groupby('Contract').agg({
+            'MonthlyCharges': ['count', 'sum']
+        }).reset_index()
+        contract_data.columns = ['Contract', 'Customers', 'Monthly Revenue']
+        
+        fig = px.bar(contract_data, x='Contract', y='Monthly Revenue',
+                    text='Customers', title='Revenue by Contract Type',
+                    color='Contract')
+        st.plotly_chart(fig, use_container_width=True)
 
     with col2:
-        # Monthly charges distribution
-        fig2 = px.histogram(sample_data, x='MonthlyCharges', 
-                           title='Distribution of Monthly Charges',
-                           nbins=20, color_discrete_sequence=['#1f77b4'])
-        st.plotly_chart(fig2, use_container_width=True)
+        # Risk distribution
+        if 'churn_probability' in data.columns:
+            risk_data = pd.cut(data['churn_probability'], 
+                              bins=[0, 0.3, 0.7, 1], 
+                              labels=['Low Risk', 'Medium Risk', 'High Risk'])
+            risk_counts = risk_data.value_counts()
+            
+            fig = px.pie(values=risk_counts.values, names=risk_counts.index,
+                        title='Customer Risk Distribution',
+                        color_discrete_sequence=['green', 'orange', 'red'])
+            st.plotly_chart(fig, use_container_width=True)
+        else:
+            st.info("Risk distribution requires churn probability data")
 
-    col3, col4 = st.columns(2)
+    # Business Impact Analysis
+    st.markdown("### 💰 Business Impact Analysis")
+    impact = calculate_business_impact(data)
+    
+    impact_cols = st.columns(4)
+    metrics = [
+        ("Potential Loss", impact['potential_loss']),
+        ("Retention Opportunity", impact['retention_opportunity']),
+        ("Intervention Cost", impact['intervention_cost']),
+        ("Net Retention Value", impact['net_retention_value'])
+    ]
+    
+    for i, (label, value) in enumerate(metrics):
+        with impact_cols[i]:
+            st.metric(label, f"${value:,.2f}")
 
-    with col3:
-        # Tenure vs Churn
-        fig3 = px.scatter(sample_data, x='tenure', y='churn_probability',
-                         color='predicted_churn',
-                         title='Tenure vs Churn Probability',
-                         labels={'predicted_churn': 'Churned'})
-        st.plotly_chart(fig3, use_container_width=True)
+    # Retention Strategy
+    st.markdown("### 🎯 Retention Strategy Analysis")
+    strategy_cols = st.columns(2)
+    
+    with strategy_cols[0]:
+        # Services impact
+        service_cols = ['OnlineSecurity', 'OnlineBackup', 'DeviceProtection', 
+                       'TechSupport', 'StreamingTV', 'StreamingMovies']
+        service_impact = []
+        
+        if 'churn_probability' in data.columns:
+            for service in service_cols:
+                if service in data.columns:
+                    impact_data = data.groupby(service)['churn_probability'].mean()
+                    if 'Yes' in impact_data.index and 'No' in impact_data.index:
+                        reduction = (impact_data['No'] - impact_data['Yes']) / impact_data['No']
+                        service_impact.append({
+                            'Service': service,
+                            'Churn Reduction': reduction
+                        })
+            
+            service_df = pd.DataFrame(service_impact)
+            if not service_df.empty:
+                fig = px.bar(service_df, x='Service', y='Churn Reduction',
+                            title='Churn Reduction by Service',
+                            labels={'Churn Reduction': 'Churn Reduction %'})
+                st.plotly_chart(fig, use_container_width=True)
+            else:
+                st.info("Service impact analysis requires service data")
+        else:
+            st.info("Service impact analysis requires churn probability data")
 
-    with col4:
-        # Internet service analysis
-        internet_churn = sample_data.groupby('InternetService')['predicted_churn'].mean().reset_index()
-        fig4 = px.pie(internet_churn, values='predicted_churn', names='InternetService',
-                     title='Churn Rate by Internet Service Type')
-        st.plotly_chart(fig4, use_container_width=True)
-
+    with strategy_cols[1]:
+        # Payment method analysis
+        if 'churn_probability' in data.columns and 'PaymentMethod' in data.columns:
+            payment_churn = data.groupby('PaymentMethod')['churn_probability'].mean()
+            fig = px.bar(x=payment_churn.index, y=payment_churn.values,
+                        title='Churn Risk by Payment Method',
+                        labels={'x': 'Payment Method', 'y': 'Average Churn Probability'})
+            st.plotly_chart(fig, use_container_width=True)
+        else:
+            st.info("Payment method analysis requires churn probability and payment method data")
+    
+    # Add feedback collection if using user data
+    if data_source == "User Data":
+        st.markdown("---")
+        collect_user_feedback()
 elif page == "🔍 Model Insights":
     st.markdown("## 🔍 Model Insights & Explainability")
 

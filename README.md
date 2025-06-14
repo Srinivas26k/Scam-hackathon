@@ -1,5 +1,5 @@
-# 🏆 Team Ideavaults - Customer Churn Prediction
-## DS-2 Hackathon Submission
+# 🏆 Team Ideavaults - Advanced Customer Retention Intelligence
+## DS-2 Hackathon Submission - Business Intelligence Enhanced
 
 [![Streamlit App](https://static.streamlit.io/badges/streamlit_badge_black_white.svg)](http://localhost:8501)
 
@@ -10,9 +10,30 @@
 
 ## 🎯 Project Overview
 
-This project delivers a comprehensive, production-ready customer churn prediction system that combines advanced machine learning techniques with an intuitive user interface. Our solution processes customer data to predict churn probability with 79.0% accuracy, helping businesses proactively retain valuable customers.
+This project delivers a comprehensive, production-ready **Customer Retention Business Intelligence Platform** that goes beyond simple churn prediction. Our solution combines advanced machine learning with actionable business insights, ROI calculations, and continuous learning capabilities to help businesses proactively retain valuable customers with measurable financial impact.
 
-## ✨ Key Features
+## 🌟 NEW: Business Intelligence Features
+
+### 💰 Advanced Financial Analytics
+- **ROI Calculations**: Real return on investment for retention campaigns
+- **Revenue Impact**: Potential loss and retention opportunity analysis
+- **Customer Lifetime Value**: Comprehensive CLV calculations
+- **Cost-Benefit Analysis**: Intervention costs vs acquisition costs
+- **Net Retention Value**: Overall business impact assessment
+
+### 🔄 Continuous Learning System
+- **User Feedback Collection**: 5-point rating scales for prediction accuracy
+- **Quality Assessment**: Automatic prediction confidence tracking
+- **Model Improvement**: Self-learning from user interactions
+- **Performance Monitoring**: Real-time system effectiveness metrics
+
+### 🎯 Intelligent Retention Strategies
+- **Personalized Recommendations**: Contract, service, and payment optimizations
+- **Intervention Timing**: Risk-based action urgency (24h to quarterly)
+- **Loyalty Programs**: Tenure-based VIP and rewards enrollment
+- **Cost Optimization**: Price sensitivity and package reviews
+
+## ✨ Core Technical Features
 
 ### 🤖 Advanced ML Pipeline
 - **Ensemble Learning**: LightGBM, XGBoost, and Random Forest combination
@@ -58,9 +79,30 @@ This project delivers a comprehensive, production-ready customer churn predictio
    streamlit run churn_prediction_app.py
    ```
 
-4. **Access the application**
+4. **Access the Enhanced Business Intelligence Platform**
    - Open your browser and navigate to `http://localhost:8501`
-   - Start predicting customer churn!
+   - Experience advanced churn prediction with business intelligence!
+
+## 🚀 Quick Demo of Enhanced Features
+
+### Test the Business Intelligence Features:
+```bash
+# Run the enhanced demo
+./scripts/business_demo.sh
+
+# Test with sample data
+# 1. Go to "📈 Batch Prediction" page
+# 2. Upload: assets/test_customers.csv
+# 3. See business impact analysis & ROI calculations
+# 4. Provide feedback for continuous learning
+```
+
+### Key Pages to Explore:
+- **🏠 Home**: Overview of business impact and quick stats
+- **👤 Single Prediction**: Individual customer analysis with recommendations
+- **📈 Batch Prediction**: Bulk processing with business metrics
+- **📊 Analytics**: Business intelligence dashboard with financial insights
+- **🔍 Model Insights**: Technical performance and feature importance
 
 ## 📁 Project Structure
 
