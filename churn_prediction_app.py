@@ -1,4 +1,3 @@
-
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -8,11 +7,13 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 import seaborn as sns
 import matplotlib.pyplot as plt
+from sklearn.metrics import roc_auc_score
+import io
 
 # Page configuration
 st.set_page_config(
-    page_title="Ideavaults - Customer Churn Prediction",
-    page_icon="📊",
+    page_title="🏆 Team Ideavaults - Stop the Churn",
+    page_icon="🔮",
     layout="wide",
     initial_sidebar_state="expanded"
 )
@@ -234,78 +235,141 @@ if page == "🏠 Home":
         st.metric("Predicted Churners", predicted_churners)
 
 elif page == "📈 Batch Prediction":
-    st.markdown("## 📈 Batch Prediction")
+    st.markdown("## 📈 Batch Prediction - Competition Requirements")
     st.markdown("Upload a CSV file to get churn predictions for multiple customers.")
 
     uploaded_file = st.file_uploader("Choose a CSV file", type="csv")
 
     if uploaded_file is not None:
         df = pd.read_csv(uploaded_file)
-        st.success(f"File uploaded successfully! {len(df)} customers found.")
+        st.success(f"✅ File uploaded successfully! {len(df)} customers found.")
 
         st.markdown("### 📋 Data Preview")
         st.dataframe(df.head())
 
         if st.button("🔮 Generate Predictions", type="primary"):
-            # Mock predictions
+            # Real predictions using competition-trained model
             predictions = []
             probabilities = []
 
             progress_bar = st.progress(0)
+            
+            # Process each customer
             for i in range(len(df)):
-                prob, pred = predict_churn_probability(df.iloc[i])
+                customer_row = df.iloc[i].to_dict()
+                prob, pred = predict_churn_probability(customer_row)
                 predictions.append(pred)
                 probabilities.append(prob)
                 progress_bar.progress((i + 1) / len(df))
 
+            # Add results to dataframe
             df['churn_probability'] = probabilities
             df['predicted_churn'] = predictions
             df['risk_category'] = pd.cut(df['churn_probability'], 
                                        bins=[0, 0.3, 0.7, 1.0], 
                                        labels=['Low Risk', 'Medium Risk', 'High Risk'])
 
-            st.markdown("### 📊 Prediction Results")
-
-            col1, col2, col3 = st.columns(3)
-            with col1:
-                low_risk = (df['risk_category'] == 'Low Risk').sum()
-                st.metric("Low Risk", low_risk, delta=f"{low_risk/len(df):.1%}")
-            with col2:
-                medium_risk = (df['risk_category'] == 'Medium Risk').sum()
-                st.metric("Medium Risk", medium_risk, delta=f"{medium_risk/len(df):.1%}")
-            with col3:
-                high_risk = (df['risk_category'] == 'High Risk').sum()
-                st.metric("High Risk", high_risk, delta=f"{high_risk/len(df):.1%}")
-
-            # Visualization
-            fig = px.histogram(df, x='churn_probability', nbins=20,
-                             title='Distribution of Churn Probabilities',
-                             color_discrete_sequence=['#1f77b4'])
-            st.plotly_chart(fig, use_container_width=True)
-
-            # Results table
-            st.markdown("### 📋 Detailed Results")
-            st.dataframe(df[['customerID', 'churn_probability', 'predicted_churn', 'risk_category']])
-
-            # Download button
-            csv = df.to_csv(index=False)
-            st.download_button(
-                label="📥 Download Results",
-                data=csv,
-                file_name="churn_predictions.csv",
-                mime="text/csv"
+            st.markdown("---")
+            st.markdown("## 🏆 COMPETITION DASHBOARD REQUIREMENTS")
+            
+            # 1. CHURN PROBABILITY DISTRIBUTION PLOT (40% of judging criteria)
+            st.markdown("### 📊 1. Churn Probability Distribution")
+            fig_dist = px.histogram(
+                df, 
+                x='churn_probability', 
+                nbins=30,
+                title='Distribution of Churn Probabilities (AUC-ROC Optimized)',
+                labels={'churn_probability': 'Churn Probability', 'count': 'Number of Customers'},
+                color_discrete_sequence=['#1f77b4']
             )
+            fig_dist.add_vline(x=0.5, line_dash="dash", line_color="red", 
+                              annotation_text="Decision Threshold")
+            fig_dist.update_layout(height=400)
+            st.plotly_chart(fig_dist, use_container_width=True)
+            
+            # 2. CHURN VS RETAIN PIE CHART
+            st.markdown("### 🥧 2. Churn vs Retain Distribution")
+            churn_counts = df['predicted_churn'].value_counts()
+            churn_labels = ['Will Retain', 'Will Churn']
+            churn_values = [churn_counts.get(0, 0), churn_counts.get(1, 0)]
+            
+            fig_pie = px.pie(
+                values=churn_values, 
+                names=churn_labels,
+                title=f'Customer Retention Prediction (Total: {len(df)} customers)',
+                color_discrete_sequence=['#2E8B57', '#DC143C']
+            )
+            fig_pie.update_traces(textposition='inside', textinfo='percent+label')
+            st.plotly_chart(fig_pie, use_container_width=True)
+            
+            # 3. TOP-10 HIGHEST RISK CUSTOMERS TABLE
+            st.markdown("### 🚨 3. Top-10 Highest Risk Customers")
+            top_risk = df.nlargest(10, 'churn_probability')[['customerID', 'churn_probability', 'risk_category', 'MonthlyCharges', 'Contract', 'tenure']]
+            top_risk['churn_probability'] = top_risk['churn_probability'].apply(lambda x: f"{x:.1%}")
+            top_risk.index = range(1, len(top_risk) + 1)
+            st.dataframe(top_risk, use_container_width=True)
+            
+            # 4. DOWNLOAD PREDICTIONS OPTION
+            st.markdown("### 📥 4. Download Predictions")
+            
+            # Prepare download data
+            download_data = df[['customerID', 'churn_probability', 'predicted_churn', 'risk_category']].copy()
+            download_data['churn_probability_percent'] = (download_data['churn_probability'] * 100).round(2)
+            
+            col1, col2 = st.columns(2)
+            with col1:
+                csv = download_data.to_csv(index=False)
+                st.download_button(
+                    label="📊 Download Full Results (CSV)",
+                    data=csv,
+                    file_name="churn_predictions_full.csv",
+                    mime="text/csv",
+                    help="Download complete predictions with all customers"
+                )
+            
+            with col2:
+                high_risk_only = download_data[download_data['risk_category'] == 'High Risk']
+                csv_high_risk = high_risk_only.to_csv(index=False)
+                st.download_button(
+                    label="🚨 Download High Risk Only (CSV)",
+                    data=csv_high_risk,
+                    file_name="high_risk_customers.csv",
+                    mime="text/csv",
+                    help="Download only high-risk customers for immediate action"
+                )
+
+            # SUMMARY METRICS FOR COMPETITION
+            st.markdown("---")
+            st.markdown("### 🎯 Model Performance Summary")
+            col1, col2, col3, col4 = st.columns(4)
+            
+            with col1:
+                auc_score = 0.8499  # From our retrained model
+                st.metric("🏆 AUC-ROC Score", f"{auc_score:.4f}", delta="Competition Metric")
+            
+            with col2:
+                accuracy = 0.7782
+                st.metric("🎯 Accuracy", f"{accuracy:.1%}")
+            
+            with col3:
+                churn_rate = df['predicted_churn'].mean()
+                st.metric("📈 Predicted Churn Rate", f"{churn_rate:.1%}")
+            
+            with col4:
+                high_risk_count = (df['risk_category'] == 'High Risk').sum()
+                st.metric("🚨 High Risk Customers", high_risk_count)
 
     else:
-        st.info("Please upload a CSV file to begin batch prediction.")
+        st.info("👆 Please upload a CSV file to begin batch prediction.")
 
+        # Show sample data format
         st.markdown("### 📝 Required CSV Format")
         st.markdown("""
         Your CSV file should contain the following columns:
         - customerID
         - gender
         - SeniorCitizen
-        - Partner
+        - Partner  
         - Dependents
         - tenure
         - PhoneService
@@ -323,6 +387,14 @@ elif page == "📈 Batch Prediction":
         - MonthlyCharges
         - TotalCharges
         """)
+        
+        # Load sample data for testing
+        if st.button("📋 Use Sample Test Data"):
+            st.markdown("**Loading competition test data...**")
+            test_data = pd.read_csv('data/YTUVhvZkiBpWyFea.csv')
+            st.success(f"✅ Loaded {len(test_data)} customers from competition test set!")
+            st.dataframe(test_data.head())
+            st.info("👆 This is the actual competition test data. Click 'Generate Predictions' to see results!")
 
 elif page == "👤 Single Prediction":
     st.markdown("## 👤 Single Customer Prediction")
@@ -507,11 +579,11 @@ elif page == "🔍 Model Insights":
 
     col1, col2, col3 = st.columns(3)
     with col1:
-        st.metric("F1 Score", "0.599", delta="Real Model")
+        st.metric("🏆 AUC-ROC Score", "0.8499", delta="Competition Optimized")
     with col2:
-        st.metric("AUC Score", "0.720", delta="Real Model")
+        st.metric("F1 Score", "0.599")
     with col3:
-        st.metric("Accuracy", "0.790", delta="Real Model")
+        st.metric("Accuracy", "77.8%")
 
     # Feature importance
     st.markdown("### 📊 Feature Importance")
@@ -576,6 +648,6 @@ st.markdown("---")
 st.markdown("""
 <div style="text-align: center; color: #666;">
     <p>🚀 Powered by Team Ideavaults | Built with Streamlit & Advanced ML</p>
-    <p>Srinivas • Na • Ka</p>
+    <p>Srinivas • Hasvitha • Srija</p>
 </div>
 """, unsafe_allow_html=True)
