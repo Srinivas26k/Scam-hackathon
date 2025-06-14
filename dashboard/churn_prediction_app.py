@@ -87,11 +87,20 @@ page = st.sidebar.selectbox("Choose Page", ["🏠 Home", "📈 Batch Prediction"
 @st.cache_data
 def load_model():
     """Load the trained model and preprocessor"""
+    import os
     try:
-        model = joblib.load('models/churn_model.joblib')
-        preprocessor = joblib.load('models/preprocessor.joblib')
+        # Get the directory of the current script
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        # Go up one level to the project root and then to models
+        project_root = os.path.dirname(current_dir)
+        model_path = os.path.join(project_root, 'models', 'churn_model.joblib')
+        preprocessor_path = os.path.join(project_root, 'models', 'preprocessor.joblib')
+        
+        model = joblib.load(model_path)
+        preprocessor = joblib.load(preprocessor_path)
         return model, preprocessor
-    except:
+    except Exception as e:
+        st.error(f"Error loading model: {str(e)}")
         return None, None
 
 @st.cache_data

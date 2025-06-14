@@ -33,6 +33,9 @@ echo "   🚨 Top-10 highest risk customers table"
 echo "   📥 Download predictions option"
 echo ""
 
+# Navigate to project root
+cd "$(dirname "$0")/.."
+
 # Check if virtual environment exists
 if [[ -d ".venv" ]]; then
     echo "✅ Virtual environment ready"
@@ -41,14 +44,14 @@ else
     echo "⚠️  Setting up virtual environment..."
     python -m venv .venv
     source .venv/bin/activate
-    pip install -r requirements.txt
+    pip install -r config/requirements.txt
 fi
 
 echo ""
 echo "🔍 VERIFYING COMPETITION READINESS..."
 
 # Check all required files
-echo "📁 Checking files:"
+echo "📁 Checking project structure:"
 echo -n "   Competition data: "
 if [[ -f "data/gBqE3R1cmOb0qyAv.csv" ]] && [[ -f "data/YTUVhvZkiBpWyFea.csv" ]]; then
     echo "✅"
@@ -64,14 +67,14 @@ else
 fi
 
 echo -n "   Predictions ready: "
-if [[ -f "predictions.csv" ]]; then
+if [[ -f "assets/predictions.csv" ]]; then
     echo "✅"
 else
     echo "❌"
 fi
 
 echo -n "   Dashboard app: "
-if [[ -f "churn_prediction_app.py" ]]; then
+if [[ -f "dashboard/churn_prediction_app.py" ]]; then
     echo "✅"
 else
     echo "❌"
@@ -119,4 +122,4 @@ echo "🚀 LAUNCHING DASHBOARD..."
 pkill -f streamlit 2>/dev/null
 
 # Start the application
-streamlit run churn_prediction_app.py --server.port 8501 --server.address localhost
+streamlit run dashboard/churn_prediction_app.py --server.port 8501 --server.address localhost
