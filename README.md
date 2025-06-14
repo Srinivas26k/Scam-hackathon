@@ -28,10 +28,12 @@ This project delivers a comprehensive, production-ready customer churn predictio
 - **Risk Categorization**: Low, Medium, and High risk classifications
 
 ### 📊 Performance Metrics
-- **F1 Score**: 0.599
-- **AUC Score**: 0.720
 - **Accuracy**: 79.0%
-- **Prediction Speed**: < 100ms per customer
+- **F1 Score**: 0.599
+- **Precision**: 0.557
+- **Recall**: 0.650
+- **Training Time**: ~2 minutes
+- **Prediction Speed**: < 50ms per customer
 
 ## 🚀 Quick Start
 
@@ -41,13 +43,13 @@ This project delivers a comprehensive, production-ready customer churn predictio
 
 ### Installation
 
-1. **Clone the repository**
+1. **Setup the project**
    ```bash
-   git clone https://github.com/your-username/churn-prediction-ideavaults.git
-   cd churn-prediction-ideavaults
+   cd submission
+   source .venv/bin/activate  # Virtual environment already configured
    ```
 
-2. **Install dependencies**
+2. **Verify installation** (optional)
    ```bash
    pip install -r requirements.txt
    ```
@@ -55,6 +57,11 @@ This project delivers a comprehensive, production-ready customer churn predictio
 3. **Run the Streamlit application**
    ```bash
    streamlit run churn_prediction_app.py
+   ```
+
+4. **Or use the quick demo script**
+   ```bash
+   ./demo.sh
    ```
 
 4. **Access the application**
