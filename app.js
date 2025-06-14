@@ -3,9 +3,9 @@
 // Application data
 const appData = {
   teamMembers: [
-    {"name": "Sri", "role": "ML Engineer", "expertise": "Deep Learning & Feature Engineering"},
-    {"name": "Na", "role": "Data Scientist", "expertise": "Statistical Analysis & Model Optimization"},
-    {"name": "Ka", "role": "Full-Stack Developer", "expertise": "Deployment & UI/UX Design"}
+    {"name": "Srinivas", "role": "ML Engineer", "expertise": "Deep Learning & Feature Engineering"},
+    {"name": "Srija", "role": "Data Scientist", "expertise": "Statistical Analysis & Model Optimization"},
+    {"name": "Hasvitha", "role": "Full-Stack Developer", "expertise": "Deployment & UI/UX Design"}
   ],
   modelMetrics: {
     f1Score: 0.847,

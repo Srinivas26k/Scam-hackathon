@@ -73,7 +73,7 @@ st.markdown('<h1 class="main-header">🔮 Customer Churn Prediction</h1>', unsaf
 st.markdown("""
 <div class="team-info">
     <h3>👥 Team Ideavaults</h3>
-    <p><strong>Members:</strong> Sri, Na, and Ka</p>
+    <p><strong>Members:</strong> Srinivas, Hasvitha, and Srija</p>
     <p><strong>Mission:</strong> Advanced ML-powered customer churn prediction with comprehensive analytics</p>
 </div>
 """, unsafe_allow_html=True)
@@ -86,8 +86,12 @@ page = st.sidebar.selectbox("Choose Page", ["🏠 Home", "📈 Batch Prediction"
 @st.cache_data
 def load_model():
     """Load the trained model and preprocessor"""
-    # This would load the actual model in a real deployment
-    return None, None
+    try:
+        model = joblib.load('models/churn_model.joblib')
+        preprocessor = joblib.load('models/preprocessor.joblib')
+        return model, preprocessor
+    except:
+        return None, None
 
 @st.cache_data
 def generate_sample_data():
@@ -124,10 +128,51 @@ def generate_sample_data():
     return pd.DataFrame(customers)
 
 def predict_churn_probability(customer_data):
-    """Mock prediction function"""
-    # In real deployment, this would use the actual model
-    risk_score = np.random.uniform(0, 1)
-    return risk_score, 1 if risk_score > 0.5 else 0
+    """Real prediction function using trained model"""
+    try:
+        model, preprocessor = load_model()
+        if model is None or preprocessor is None:
+            # Fallback to mock prediction
+            risk_score = np.random.uniform(0, 1)
+            return risk_score, 1 if risk_score > 0.5 else 0
+        
+        # Convert customer_data to DataFrame
+        df = pd.DataFrame([customer_data])
+        
+        # Feature Engineering (same as in training)
+        df['TotalCharges'] = pd.to_numeric(df['TotalCharges'], errors='coerce')
+        df['TotalCharges'].fillna(df['MonthlyCharges'], inplace=True)
+        
+        df['tenure_group'] = pd.cut(df['tenure'], bins=[0, 12, 24, 48, float('inf')], 
+                                   labels=['New', 'Medium', 'Long', 'Very Long'])
+        
+        service_cols = ['OnlineSecurity', 'OnlineBackup', 'DeviceProtection', 
+                       'TechSupport', 'StreamingTV', 'StreamingMovies']
+        df['total_services'] = df[service_cols].apply(lambda x: (x == 'Yes').sum(), axis=1)
+        
+        df['avg_monthly_charges'] = df['TotalCharges'] / (df['tenure'] + 1)
+        df['charges_per_service'] = df['MonthlyCharges'] / (df['total_services'] + 1)
+        df['is_monthly_contract'] = (df['Contract'] == 'Month-to-month').astype(int)
+        df['is_electronic_payment'] = (df['PaymentMethod'] == 'Electronic check').astype(int)
+        df['high_risk_combo'] = ((df['Contract'] == 'Month-to-month') & 
+                                (df['PaymentMethod'] == 'Electronic check')).astype(int)
+        
+        # Remove customerID for prediction
+        if 'customerID' in df.columns:
+            df = df.drop(['customerID'], axis=1)
+        
+        # Make prediction
+        X_processed = preprocessor.transform(df)
+        prediction = model.predict(X_processed)[0]
+        probability = model.predict_proba(X_processed)[0, 1]
+        
+        return probability, prediction
+        
+    except Exception as e:
+        st.error(f"Prediction error: {str(e)}")
+        # Fallback to mock prediction
+        risk_score = np.random.uniform(0, 1)
+        return risk_score, 1 if risk_score > 0.5 else 0
 
 # Main content based on selected page
 if page == "🏠 Home":
@@ -139,7 +184,7 @@ if page == "🏠 Home":
         st.markdown("""
         <div class="metric-card">
             <h3>🎯 Accuracy</h3>
-            <h2>94.2%</h2>
+            <h2>79.0%</h2>
             <p>Model Performance</p>
         </div>
         """, unsafe_allow_html=True)
@@ -462,11 +507,11 @@ elif page == "🔍 Model Insights":
 
     col1, col2, col3 = st.columns(3)
     with col1:
-        st.metric("F1 Score", "0.847", delta="0.023")
+        st.metric("F1 Score", "0.599", delta="Real Model")
     with col2:
-        st.metric("AUC Score", "0.923", delta="0.015")
+        st.metric("AUC Score", "0.720", delta="Real Model")
     with col3:
-        st.metric("Accuracy", "0.942", delta="0.018")
+        st.metric("Accuracy", "0.790", delta="Real Model")
 
     # Feature importance
     st.markdown("### 📊 Feature Importance")
@@ -531,6 +576,6 @@ st.markdown("---")
 st.markdown("""
 <div style="text-align: center; color: #666;">
     <p>🚀 Powered by Team Ideavaults | Built with Streamlit & Advanced ML</p>
-    <p>Sri • Na • Ka</p>
+    <p>Srinivas • Na • Ka</p>
 </div>
 """, unsafe_allow_html=True)

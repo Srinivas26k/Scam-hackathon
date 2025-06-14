@@ -4,12 +4,12 @@
 
 ## 👥 Team Information
 **Team Name:** Ideavaults  
-**Members:** Sri, Na, and Ka  
+**Members:** Srinivas, Hasvitha , & Srija
 **Competition:** Advanced Customer Churn Prediction Challenge
 
 ## 🎯 Project Overview
 
-This project delivers a comprehensive, production-ready customer churn prediction system that combines advanced machine learning techniques with an intuitive user interface. Our solution processes customer data to predict churn probability with 94.2% accuracy, helping businesses proactively retain valuable customers.
+This project delivers a comprehensive, production-ready customer churn prediction system that combines advanced machine learning techniques with an intuitive user interface. Our solution processes customer data to predict churn probability with 79.0% accuracy, helping businesses proactively retain valuable customers.
 
 ## ✨ Key Features
 
@@ -28,9 +28,9 @@ This project delivers a comprehensive, production-ready customer churn predictio
 - **Risk Categorization**: Low, Medium, and High risk classifications
 
 ### 📊 Performance Metrics
-- **F1 Score**: 0.847
-- **AUC Score**: 0.923
-- **Accuracy**: 94.2%
+- **F1 Score**: 0.599
+- **AUC Score**: 0.720
+- **Accuracy**: 79.0%
 - **Prediction Speed**: < 100ms per customer
 
 ## 🚀 Quick Start
@@ -120,13 +120,13 @@ ensemble = VotingClassifier([
 
 ## 📈 Model Performance
 
-| Metric | Score | Improvement |
+| Metric | Score | Description |
 |--------|-------|-------------|
-| F1 Score | 0.847 | +2.3% |
-| AUC Score | 0.923 | +1.5% |
-| Accuracy | 94.2% | +1.8% |
-| Precision | 0.856 | +2.1% |
-| Recall | 0.839 | +2.5% |
+| F1 Score | 0.599 | Balanced precision-recall measure |
+| AUC Score | 0.720 | Area under ROC curve |
+| Accuracy | 79.0% | Overall prediction accuracy |
+| Precision | 0.61 | Positive prediction accuracy |
+| Recall | 0.59 | True positive detection rate |
 
 ### Feature Importance (Top 10)
 1. **tenure** (25.0%) - Customer retention period
@@ -250,7 +250,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 - **Competition Organizers**: For providing the challenging dataset
 - **Open Source Community**: For the amazing ML libraries
-- **Team Ideavaults**: Sri, Na, and Ka for their dedication and expertise
+- **Team Ideavaults**: Srinivas, Hasvitha , & Srija for their dedication and expertise
 
 ## 📞 Contact
 

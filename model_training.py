@@ -1,7 +1,7 @@
 
 """
 Complete Customer Churn Prediction Model Training Pipeline
-Team Ideavaults: Sri, Na, and Ka
+Team Ideavaults: Srinivas, Hasvitha , & Srija
 """
 
 import pandas as pd
@@ -179,14 +179,14 @@ class ChurnPredictor:
 
         return predictions, probabilities
 
-    def save_model(self, model_path='churn_model.joblib', preprocessor_path='preprocessor.joblib'):
+    def save_model(self, model_path='models/churn_model.joblib', preprocessor_path='models/preprocessor.joblib'):
         """Save trained model and preprocessor"""
         joblib.dump(self.model, model_path)
         joblib.dump(self.preprocessor, preprocessor_path)
         print(f"Model saved to {model_path}")
         print(f"Preprocessor saved to {preprocessor_path}")
 
-    def load_model(self, model_path='churn_model.joblib', preprocessor_path='preprocessor.joblib'):
+    def load_model(self, model_path='models/churn_model.joblib', preprocessor_path='models/preprocessor.joblib'):
         """Load trained model and preprocessor"""
         self.model = joblib.load(model_path)
         self.preprocessor = joblib.load(preprocessor_path)
@@ -198,7 +198,7 @@ if __name__ == "__main__":
     predictor = ChurnPredictor()
 
     # Load and preprocess data
-    train_data = predictor.load_data('gBqE3R1cmOb0qyAv.csv')
+    train_data = predictor.load_data('data/gBqE3R1cmOb0qyAv.csv')
     X, y = predictor.preprocess_data(train_data)
 
     # Train model
