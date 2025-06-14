@@ -43,7 +43,7 @@ This project delivers a comprehensive, production-ready customer churn predictio
 
 1. **Clone the repository**
    ```bash
-   git clone https://github.com/your-username/churn-prediction-ideavaults.git
+   git clone https://github.com/Srinivas26k/Scam-hackathon.git
    cd churn-prediction-ideavaults
    ```
 
@@ -252,14 +252,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - **Open Source Community**: For the amazing ML libraries
 - **Team Ideavaults**: Srinivas, Hasvitha , & Srija for their dedication and expertise
 
-## 📞 Contact
 
-**Team Ideavaults**
-- **Email**: team.ideavaults@example.com
-- **GitHub**: [Team Ideavaults](https://github.com/team-ideavaults)
-- **LinkedIn**: [Connect with us](https://linkedin.com/company/ideavaults)
-
----
 
 <div align="center">
   <p><strong>🚀 Built with ❤️ by Team Ideavaults</strong></p>
