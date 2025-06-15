@@ -675,37 +675,39 @@ if page == "🏠 Home":
 elif page == "📈 Batch Prediction":
     st.markdown("## 📈 Batch Prediction")
     
-    # Data Format Info Button
-    if st.button("ℹ️ Required Data Format"):
-        st.info("""
-        ### Required CSV Format
-        Your CSV file should contain the following columns:
-        
-        - customerID: Unique identifier for each customer
-        - gender: 'Male' or 'Female'
-        - SeniorCitizen: 0 or 1
-        - Partner: 'Yes' or 'No'
-        - Dependents: 'Yes' or 'No'
-        - tenure: Number of months the customer has stayed
-        - PhoneService: 'Yes' or 'No'
-        - MultipleLines: 'Yes', 'No', or 'No phone service'
-        - InternetService: 'DSL', 'Fiber optic', or 'No'
-        - OnlineSecurity: 'Yes', 'No', or 'No internet service'
-        - OnlineBackup: 'Yes', 'No', or 'No internet service'
-        - DeviceProtection: 'Yes', 'No', or 'No internet service'
-        - TechSupport: 'Yes', 'No', or 'No internet service'
-        - StreamingTV: 'Yes', 'No', or 'No internet service'
-        - StreamingMovies: 'Yes', 'No', or 'No internet service'
-        - Contract: 'Month-to-month', 'One year', or 'Two year'
-        - PaperlessBilling: 'Yes' or 'No'
-        - PaymentMethod: 'Electronic check', 'Mailed check', 'Bank transfer (automatic)', or 'Credit card (automatic)'
-        - MonthlyCharges: Numeric value
-        - TotalCharges: Numeric value
-        """)
+    # Data Format Info Button in a container to prevent re-rendering
+    with st.container():
+        if st.button("ℹ️ Required Data Format"):
+            with st.expander("Required CSV Format", expanded=True):
+                st.markdown("""
+                ### Required CSV Format
+                Your CSV file should contain the following columns:
+                
+                - customerID: Unique identifier for each customer
+                - gender: 'Male' or 'Female'
+                - SeniorCitizen: 0 or 1
+                - Partner: 'Yes' or 'No'
+                - Dependents: 'Yes' or 'No'
+                - tenure: Number of months the customer has stayed
+                - PhoneService: 'Yes' or 'No'
+                - MultipleLines: 'Yes', 'No', or 'No phone service'
+                - InternetService: 'DSL', 'Fiber optic', or 'No'
+                - OnlineSecurity: 'Yes', 'No', or 'No internet service'
+                - OnlineBackup: 'Yes', 'No', or 'No internet service'
+                - DeviceProtection: 'Yes', 'No', or 'No internet service'
+                - TechSupport: 'Yes', 'No', or 'No internet service'
+                - StreamingTV: 'Yes', 'No', or 'No internet service'
+                - StreamingMovies: 'Yes', 'No', or 'No internet service'
+                - Contract: 'Month-to-month', 'One year', or 'Two year'
+                - PaperlessBilling: 'Yes' or 'No'
+                - PaymentMethod: 'Electronic check', 'Mailed check', 'Bank transfer (automatic)', or 'Credit card (automatic)'
+                - MonthlyCharges: Numeric value
+                - TotalCharges: Numeric value
+                """)
     
     if st.session_state.user_data is not None:
-        # Generate predictions
-        if st.button("Generate Predictions"):
+        # Automatically generate predictions if not already done
+        if 'churn_probability' not in st.session_state.user_data.columns:
             with st.spinner("Generating predictions..."):
                 # Process the data
                 df = st.session_state.user_data.copy()
@@ -726,95 +728,173 @@ elif page == "📈 Batch Prediction":
         
         # Display results if predictions exist
         if 'churn_probability' in st.session_state.user_data.columns:
-            # Business Impact Summary
+            # Business Impact Summary with modern cards
             st.markdown("### 📊 Business Impact Summary")
             impact_metrics = calculate_business_impact(st.session_state.user_data)
             
-            col1, col2, col3, col4 = st.columns(4)
+            # Create a grid of metric cards
+            metrics = [
+                ("Potential Revenue Loss", f"${impact_metrics['potential_loss']:,.2f}", "💰"),
+                ("At-Risk Revenue", f"${impact_metrics['at_risk_revenue']:,.2f}", "⚠️"),
+                ("Predicted ROI", f"{impact_metrics['predicted_roi']:.2f}x", "📈"),
+                ("Net Retention Value", f"${impact_metrics['net_retention_value']:,.2f}", "💎")
+            ]
             
-            with col1:
-                st.metric("Potential Revenue Loss", f"${impact_metrics['potential_loss']:,.2f}")
+            cols = st.columns(4)
+            for col, (label, value, emoji) in zip(cols, metrics):
+                with col:
+                    st.markdown(f"""
+                    <div style='padding: 20px; border-radius: 10px; background-color: #f0f2f6; text-align: center;'>
+                        <h3>{emoji}</h3>
+                        <h4>{label}</h4>
+                        <h2>{value}</h2>
+                    </div>
+                    """, unsafe_allow_html=True)
             
-            with col2:
-                st.metric("At-Risk Revenue", f"${impact_metrics['at_risk_revenue']:,.2f}")
+            # Visualizations in tabs
+            st.markdown("### 📈 Analytics Dashboard")
+            tab1, tab2, tab3 = st.tabs(["Risk Distribution", "Customer Segments", "Top Risks"])
             
-            with col3:
-                st.metric("Predicted ROI", f"{impact_metrics['predicted_roi']:.2f}x")
+            with tab1:
+                col1, col2 = st.columns(2)
+                
+                with col1:
+                    # Churn Probability Distribution
+                    fig = px.histogram(
+                        st.session_state.user_data,
+                        x='churn_probability',
+                        nbins=20,
+                        title='Churn Probability Distribution',
+                        labels={'churn_probability': 'Probability', 'count': 'Number of Customers'},
+                        color_discrete_sequence=['#1f77b4']
+                    )
+                    fig.update_layout(
+                        plot_bgcolor='white',
+                        paper_bgcolor='white',
+                        showlegend=False
+                    )
+                    st.plotly_chart(fig, use_container_width=True)
+                
+                with col2:
+                    # Customer Retention Distribution
+                    retention_data = st.session_state.user_data['predicted_churn'].value_counts()
+                    fig = px.pie(
+                        values=retention_data.values,
+                        names=['Retained', 'Churned'],
+                        title='Customer Retention Distribution',
+                        color_discrete_sequence=['#2ecc71', '#e74c3c']
+                    )
+                    fig.update_layout(
+                        plot_bgcolor='white',
+                        paper_bgcolor='white'
+                    )
+                    st.plotly_chart(fig, use_container_width=True)
             
-            with col4:
-                st.metric("Net Retention Value", f"${impact_metrics['net_retention_value']:,.2f}")
+            with tab2:
+                col1, col2 = st.columns(2)
+                
+                with col1:
+                    # Contract Distribution
+                    contract_data = st.session_state.user_data.groupby('Contract').agg({
+                        'MonthlyCharges': ['count', 'mean']
+                    }).reset_index()
+                    contract_data.columns = ['Contract', 'Customers', 'Avg Monthly Charges']
+                    
+                    fig = px.bar(
+                        contract_data,
+                        x='Contract',
+                        y='Customers',
+                        color='Avg Monthly Charges',
+                        title='Customer Distribution by Contract Type',
+                        color_continuous_scale='Viridis'
+                    )
+                    fig.update_layout(
+                        plot_bgcolor='white',
+                        paper_bgcolor='white'
+                    )
+                    st.plotly_chart(fig, use_container_width=True)
+                
+                with col2:
+                    # Service Usage
+                    service_cols = ['OnlineSecurity', 'OnlineBackup', 'DeviceProtection',
+                                  'TechSupport', 'StreamingTV', 'StreamingMovies']
+                    service_usage = st.session_state.user_data[service_cols].apply(
+                        lambda x: (x == 'Yes').sum()
+                    ).reset_index()
+                    service_usage.columns = ['Service', 'Usage Count']
+                    
+                    fig = px.bar(
+                        service_usage,
+                        x='Service',
+                        y='Usage Count',
+                        title='Service Usage Distribution',
+                        color='Usage Count',
+                        color_continuous_scale='Viridis'
+                    )
+                    fig.update_layout(
+                        plot_bgcolor='white',
+                        paper_bgcolor='white'
+                    )
+                    st.plotly_chart(fig, use_container_width=True)
             
-            # Visualizations
-            col1, col2 = st.columns(2)
-            
-            with col1:
-                # Churn Probability Distribution
-                fig = px.histogram(
-                    st.session_state.user_data,
-                    x='churn_probability',
-                    nbins=20,
-                    title='Churn Probability Distribution',
-                    labels={'churn_probability': 'Probability', 'count': 'Number of Customers'}
+            with tab3:
+                # Top 10 Highest Risk Customers
+                st.markdown("### 🚨 Top 10 Highest Risk Customers")
+                high_risk = st.session_state.user_data.nlargest(10, 'churn_probability')
+                
+                # Create a styled dataframe
+                st.dataframe(
+                    high_risk[['customerID', 'churn_probability', 'MonthlyCharges', 'Contract', 'tenure']]
+                    .style.background_gradient(subset=['churn_probability'], cmap='RdYlGn_r')
+                    .format({
+                        'churn_probability': '{:.1%}',
+                        'MonthlyCharges': '${:.2f}'
+                    })
                 )
-                st.plotly_chart(fig, use_container_width=True)
             
-            with col2:
-                # Customer Retention Distribution
-                retention_data = st.session_state.user_data['predicted_churn'].value_counts()
-                fig = px.pie(
-                    values=retention_data.values,
-                    names=['Retained', 'Churned'],
-                    title='Customer Retention Distribution',
-                    color_discrete_sequence=['green', 'red']
-                )
-                st.plotly_chart(fig, use_container_width=True)
+            # Download Options in a container
+            with st.container():
+                st.markdown("### 💾 Download Results")
+                col1, col2 = st.columns(2)
+                
+                with col1:
+                    csv = st.session_state.user_data.to_csv(index=False)
+                    st.download_button(
+                        "📥 Download Full Results",
+                        csv,
+                        "churn_predictions.csv",
+                        "text/csv",
+                        key='download-csv'
+                    )
+                
+                with col2:
+                    high_risk_csv = high_risk.to_csv(index=False)
+                    st.download_button(
+                        "📥 Download High-Risk Customers",
+                        high_risk_csv,
+                        "high_risk_customers.csv",
+                        "text/csv",
+                        key='download-high-risk'
+                    )
             
-            # Top 10 Highest Risk Customers
-            st.markdown("### 🚨 Top 10 Highest Risk Customers")
-            high_risk = st.session_state.user_data.nlargest(10, 'churn_probability')
-            st.dataframe(
-                high_risk[['customerID', 'churn_probability', 'MonthlyCharges', 'Contract', 'tenure']]
-                .style.background_gradient(subset=['churn_probability'], cmap='RdYlGn_r')
-            )
-            
-            # Download Options
-            st.markdown("### 💾 Download Results")
-            col1, col2 = st.columns(2)
-            
-            with col1:
-                csv = st.session_state.user_data.to_csv(index=False)
-                st.download_button(
-                    "Download Full Results",
-                    csv,
-                    "churn_predictions.csv",
-                    "text/csv",
-                    key='download-csv'
-                )
-            
-            with col2:
-                high_risk_csv = high_risk.to_csv(index=False)
-                st.download_button(
-                    "Download High-Risk Customers",
-                    high_risk_csv,
-                    "high_risk_customers.csv",
-                    "text/csv",
-                    key='download-high-risk'
-                )
-            
-            # Model Performance Summary
+            # Model Performance Summary with modern cards
             st.markdown("### 📈 Model Performance Summary")
-            col1, col2, col3 = st.columns(3)
+            metrics = [
+                ("AUC-ROC Score", "0.89", "🎯"),
+                ("Predicted Churn Rate", f"{st.session_state.user_data['predicted_churn'].mean():.1%}", "📊"),
+                ("High Risk Rate", f"{(st.session_state.user_data['churn_probability'] > 0.7).mean():.1%}", "⚠️")
+            ]
             
-            with col1:
-                st.metric("AUC-ROC Score", "0.89")
-            
-            with col2:
-                predicted_churn_rate = st.session_state.user_data['predicted_churn'].mean()
-                st.metric("Predicted Churn Rate", f"{predicted_churn_rate:.1%}")
-            
-            with col3:
-                high_risk_rate = (st.session_state.user_data['churn_probability'] > 0.7).mean()
-                st.metric("High Risk Rate", f"{high_risk_rate:.1%}")
+            cols = st.columns(3)
+            for col, (label, value, emoji) in zip(cols, metrics):
+                with col:
+                    st.markdown(f"""
+                    <div style='padding: 20px; border-radius: 10px; background-color: #f0f2f6; text-align: center;'>
+                        <h3>{emoji}</h3>
+                        <h4>{label}</h4>
+                        <h2>{value}</h2>
+                    </div>
+                    """, unsafe_allow_html=True)
     else:
         st.warning("👆 Please upload data in the sidebar to generate predictions")
 
