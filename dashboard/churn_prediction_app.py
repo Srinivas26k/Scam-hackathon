@@ -577,6 +577,171 @@ def collect_user_feedback():
         except Exception as e:
             st.error(f"Error saving feedback: {str(e)}")
 
+# Add this function at the top with other utility functions
+def generate_report_html(df, high_risk_df, impact_metrics):
+    """
+    Generate an HTML report with all visualizations and metrics.
+    """
+    # Create figures
+    # 1. Churn Probability Distribution
+    fig1 = px.histogram(
+        df,
+        x='churn_probability',
+        nbins=20,
+        title='Churn Probability Distribution',
+        labels={'churn_probability': 'Probability', 'count': 'Number of Customers'},
+        color_discrete_sequence=['#1f77b4']
+    )
+    fig1.update_layout(
+        plot_bgcolor='white',
+        paper_bgcolor='white',
+        showlegend=False
+    )
+    
+    # 2. Customer Retention Distribution
+    retention_data = df['predicted_churn'].value_counts()
+    fig2 = px.pie(
+        values=retention_data.values,
+        names=['Retained', 'Churned'],
+        title='Customer Retention Distribution',
+        color_discrete_sequence=['#2ecc71', '#e74c3c']
+    )
+    fig2.update_layout(
+        plot_bgcolor='white',
+        paper_bgcolor='white'
+    )
+    
+    # 3. Contract Distribution
+    contract_data = df.groupby('Contract').agg({
+        'MonthlyCharges': ['count', 'mean']
+    }).reset_index()
+    contract_data.columns = ['Contract', 'Customers', 'Avg Monthly Charges']
+    fig3 = px.bar(
+        contract_data,
+        x='Contract',
+        y='Customers',
+        color='Avg Monthly Charges',
+        title='Customer Distribution by Contract Type',
+        color_continuous_scale='Viridis'
+    )
+    fig3.update_layout(
+        plot_bgcolor='white',
+        paper_bgcolor='white'
+    )
+    
+    # 4. Service Usage
+    service_cols = ['OnlineSecurity', 'OnlineBackup', 'DeviceProtection',
+                   'TechSupport', 'StreamingTV', 'StreamingMovies']
+    service_usage = df[service_cols].apply(
+        lambda x: (x == 'Yes').sum()
+    ).reset_index()
+    service_usage.columns = ['Service', 'Usage Count']
+    fig4 = px.bar(
+        service_usage,
+        x='Service',
+        y='Usage Count',
+        title='Service Usage Distribution',
+        color='Usage Count',
+        color_continuous_scale='Viridis'
+    )
+    fig4.update_layout(
+        plot_bgcolor='white',
+        paper_bgcolor='white'
+    )
+    
+    # Convert figures to HTML
+    plots_html = f"""
+    <div style='page-break-after: always;'>
+        <h2>Churn Probability Distribution</h2>
+        {fig1.to_html(full_html=False)}
+    </div>
+    <div style='page-break-after: always;'>
+        <h2>Customer Retention Distribution</h2>
+        {fig2.to_html(full_html=False)}
+    </div>
+    <div style='page-break-after: always;'>
+        <h2>Contract Distribution</h2>
+        {fig3.to_html(full_html=False)}
+    </div>
+    <div style='page-break-after: always;'>
+        <h2>Service Usage Distribution</h2>
+        {fig4.to_html(full_html=False)}
+    </div>
+    """
+    
+    # Format the high-risk table
+    high_risk_table = high_risk_df[['customerID', 'churn_probability', 'MonthlyCharges', 'Contract', 'tenure']]
+    high_risk_table['churn_probability'] = high_risk_table['churn_probability'].map('{:.1%}'.format)
+    high_risk_table['MonthlyCharges'] = high_risk_table['MonthlyCharges'].map('${:.2f}'.format)
+    
+    # Create HTML report
+    html = f"""
+    <html>
+    <head>
+        <style>
+            body {{ font-family: Arial, sans-serif; margin: 20px; }}
+            .metric-card {{ 
+                background-color: #f0f2f6;
+                padding: 20px;
+                border-radius: 10px;
+                margin: 10px;
+                text-align: center;
+            }}
+            table {{ border-collapse: collapse; width: 100%; }}
+            th, td {{ border: 1px solid #ddd; padding: 8px; text-align: left; }}
+            th {{ background-color: #f0f2f6; }}
+            .high-risk {{ background-color: #ffebee; }}
+        </style>
+    </head>
+    <body>
+        <h1>Customer Churn Analysis Report</h1>
+        
+        <h2>Business Impact Summary</h2>
+        <div style='display: flex; flex-wrap: wrap;'>
+            <div class='metric-card'>
+                <h3>💰 Potential Revenue Loss</h3>
+                <h2>${impact_metrics['potential_loss']:,.2f}</h2>
+            </div>
+            <div class='metric-card'>
+                <h3>⚠️ At-Risk Revenue</h3>
+                <h2>${impact_metrics['at_risk_revenue']:,.2f}</h2>
+            </div>
+            <div class='metric-card'>
+                <h3>📈 Predicted ROI</h3>
+                <h2>{impact_metrics['predicted_roi']:.2f}x</h2>
+            </div>
+            <div class='metric-card'>
+                <h3>💎 Net Retention Value</h3>
+                <h2>${impact_metrics['net_retention_value']:,.2f}</h2>
+            </div>
+        </div>
+        
+        <h2>Model Performance Summary</h2>
+        <div style='display: flex; flex-wrap: wrap;'>
+            <div class='metric-card'>
+                <h3>🎯 AUC-ROC Score</h3>
+                <h2>0.89</h2>
+            </div>
+            <div class='metric-card'>
+                <h3>📊 Predicted Churn Rate</h3>
+                <h2>{df['predicted_churn'].mean():.1%}</h2>
+            </div>
+            <div class='metric-card'>
+                <h3>⚠️ High Risk Rate</h3>
+                <h2>{(df['churn_probability'] > 0.7).mean():.1%}</h2>
+            </div>
+        </div>
+        
+        {plots_html}
+        
+        <h2>Top 10 Highest Risk Customers</h2>
+        {high_risk_table.to_html(index=False, classes='high-risk')}
+    </body>
+    </html>
+    """
+    
+    return html
+
 # Main content based on selected page
 if page == "🏠 Home":
     st.markdown("## 🏠 Welcome to Customer Churn Prediction")
@@ -858,9 +1023,26 @@ elif page == "📈 Batch Prediction":
                 col1, col2 = st.columns(2)
                 
                 with col1:
+                    # Generate HTML report
+                    report_html = generate_report_html(
+                        st.session_state.user_data,
+                        high_risk,
+                        impact_metrics
+                    )
+                    
+                    # Create download button for HTML report
+                    st.download_button(
+                        "📥 Download Full Report (HTML)",
+                        report_html,
+                        "churn_analysis_report.html",
+                        "text/html",
+                        key='download-html'
+                    )
+                    
+                    # Also provide CSV download
                     csv = st.session_state.user_data.to_csv(index=False)
                     st.download_button(
-                        "📥 Download Full Results",
+                        "📥 Download Raw Data (CSV)",
                         csv,
                         "churn_predictions.csv",
                         "text/csv",
@@ -868,13 +1050,46 @@ elif page == "📈 Batch Prediction":
                     )
                 
                 with col2:
+                    # Generate HTML report for high-risk customers
+                    high_risk_table = high_risk[['customerID', 'churn_probability', 'MonthlyCharges', 'Contract', 'tenure']]
+                    high_risk_table['churn_probability'] = high_risk_table['churn_probability'].map('{:.1%}'.format)
+                    high_risk_table['MonthlyCharges'] = high_risk_table['MonthlyCharges'].map('${:.2f}'.format)
+                    
+                    high_risk_html = f"""
+                    <html>
+                    <head>
+                        <style>
+                            body {{ font-family: Arial, sans-serif; margin: 20px; }}
+                            table {{ border-collapse: collapse; width: 100%; }}
+                            th, td {{ border: 1px solid #ddd; padding: 8px; text-align: left; }}
+                            th {{ background-color: #f0f2f6; }}
+                            .high-risk {{ background-color: #ffebee; }}
+                        </style>
+                    </head>
+                    <body>
+                        <h1>High-Risk Customers Report</h1>
+                        <p>Total High-Risk Customers: {len(high_risk)}</p>
+                        {high_risk_table.to_html(index=False, classes='high-risk')}
+                    </body>
+                    </html>
+                    """
+                    
+                    st.download_button(
+                        "📥 Download High-Risk Report (HTML)",
+                        high_risk_html,
+                        "high_risk_customers.html",
+                        "text/html",
+                        key='download-high-risk-html'
+                    )
+                    
+                    # Also provide CSV download
                     high_risk_csv = high_risk.to_csv(index=False)
                     st.download_button(
-                        "📥 Download High-Risk Customers",
+                        "📥 Download High-Risk Data (CSV)",
                         high_risk_csv,
                         "high_risk_customers.csv",
                         "text/csv",
-                        key='download-high-risk'
+                        key='download-high-risk-csv'
                     )
             
             # Model Performance Summary with modern cards
