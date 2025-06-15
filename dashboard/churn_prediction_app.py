@@ -1,3 +1,18 @@
+"""
+Customer Churn Prediction Dashboard
+----------------------------------
+A comprehensive dashboard for predicting and analyzing customer churn using machine learning.
+Features include single customer prediction, batch processing, analytics, and business impact analysis.
+
+Team: Ideavaults (Srinivas, Hasvitha, & Srija)
+"""
+
+# Standard library imports
+import os
+import json
+from datetime import datetime
+
+# Third-party imports
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -9,9 +24,6 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 from sklearn.metrics import roc_auc_score
 import io
-import os
-import json
-from datetime import datetime
 
 # Page configuration
 st.set_page_config(
@@ -70,6 +82,10 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
+# Initialize session state for user data
+if 'user_data' not in st.session_state:
+    st.session_state.user_data = None
+
 # Header
 st.markdown('<h1 class="main-header">🔮 Customer Churn Prediction</h1>', unsafe_allow_html=True)
 
@@ -82,24 +98,28 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
-# Sidebar
+# Sidebar navigation
 st.sidebar.title("🎛️ Control Panel")
-page = st.sidebar.selectbox("Choose Page", ["🏠 Home", "📈 Batch Prediction", "👤 Single Prediction", "📊 Analytics", "🔍 Model Insights"])
+page = st.sidebar.selectbox(
+    "Choose Page",
+    ["🏠 Home", "📈 Batch Prediction", "👤 Single Prediction", "📊 Analytics", "🔍 Model Insights"]
+)
 
 # Mock functions for demonstration
-@st.cache_data
 def load_model():
-    """Load the trained model and preprocessor"""
+    """
+    Load the trained model and preprocessor from disk.
+    
+    Returns:
+        tuple: (model, preprocessor) or (None, None) if loading fails
+    """
     try:
-        # Get the current script directory and project root
         current_dir = os.path.dirname(os.path.abspath(__file__))
         project_root = os.path.dirname(current_dir)
         
-        # Construct absolute paths to model files
         model_path = os.path.join(project_root, 'models', 'churn_model.joblib')
         preprocessor_path = os.path.join(project_root, 'models', 'preprocessor.joblib')
         
-        # Check if files exist
         if not os.path.exists(model_path):
             st.error(f"Model file not found at: {model_path}")
             return None, None
@@ -114,9 +134,13 @@ def load_model():
         st.error(f"Error loading model: {str(e)}")
         return None, None
 
-@st.cache_data
 def generate_sample_data():
-    """Generate sample data for demonstration"""
+    """
+    Generate sample customer data for demonstration purposes.
+    
+    Returns:
+        pd.DataFrame: DataFrame containing sample customer data
+    """
     np.random.seed(42)
     customers = []
     for i in range(100):
@@ -148,36 +172,54 @@ def generate_sample_data():
         customers.append(customer)
     return pd.DataFrame(customers)
 
-# Add risk category to sample data
 def add_risk_categories(df):
-    """Add risk categories to dataframe based on churn probability"""
+    """
+    Add risk categories to dataframe based on churn probability.
+    
+    Args:
+        df (pd.DataFrame): Input dataframe with churn_probability column
+        
+    Returns:
+        pd.DataFrame: DataFrame with added risk_category column
+    """
     if 'churn_probability' in df.columns and 'risk_category' not in df.columns:
-        df = df.copy()  # Create a copy to avoid modifying the original
-        df['risk_category'] = pd.cut(df['churn_probability'], 
-                                   bins=[0, 0.3, 0.7, 1.0], 
-                                   labels=['Low Risk', 'Medium Risk', 'High Risk'])
+        df = df.copy()
+        df['risk_category'] = pd.cut(
+            df['churn_probability'],
+            bins=[0, 0.3, 0.7, 1.0],
+            labels=['Low Risk', 'Medium Risk', 'High Risk']
+        )
     return df
 
 def predict_churn_probability(customer_data):
-    """Real prediction function using trained model"""
+    """
+    Predict churn probability for a single customer.
+    
+    Args:
+        customer_data (dict): Dictionary containing customer features
+        
+    Returns:
+        tuple: (probability, prediction) where probability is float and prediction is binary
+    """
     try:
         model, preprocessor = load_model()
         if model is None or preprocessor is None:
-            # Fallback to mock prediction
             risk_score = np.random.uniform(0, 1)
             return risk_score, 1 if risk_score > 0.5 else 0
         
-        # Convert customer_data to DataFrame
         df = pd.DataFrame([customer_data])
         
-        # Feature Engineering (same as in training)
+        # Feature Engineering
         df['TotalCharges'] = pd.to_numeric(df['TotalCharges'], errors='coerce')
         df['TotalCharges'].fillna(df['MonthlyCharges'], inplace=True)
         
-        df['tenure_group'] = pd.cut(df['tenure'], bins=[0, 12, 24, 48, float('inf')], 
-                                   labels=['New', 'Medium', 'Long', 'Very Long'])
+        df['tenure_group'] = pd.cut(
+            df['tenure'],
+            bins=[0, 12, 24, 48, float('inf')],
+            labels=['New', 'Medium', 'Long', 'Very Long']
+        )
         
-        service_cols = ['OnlineSecurity', 'OnlineBackup', 'DeviceProtection', 
+        service_cols = ['OnlineSecurity', 'OnlineBackup', 'DeviceProtection',
                        'TechSupport', 'StreamingTV', 'StreamingMovies']
         df['total_services'] = df[service_cols].apply(lambda x: (x == 'Yes').sum(), axis=1)
         
@@ -185,14 +227,12 @@ def predict_churn_probability(customer_data):
         df['charges_per_service'] = df['MonthlyCharges'] / (df['total_services'] + 1)
         df['is_monthly_contract'] = (df['Contract'] == 'Month-to-month').astype(int)
         df['is_electronic_payment'] = (df['PaymentMethod'] == 'Electronic check').astype(int)
-        df['high_risk_combo'] = ((df['Contract'] == 'Month-to-month') & 
+        df['high_risk_combo'] = ((df['Contract'] == 'Month-to-month') &
                                 (df['PaymentMethod'] == 'Electronic check')).astype(int)
         
-        # Remove customerID for prediction
         if 'customerID' in df.columns:
             df = df.drop(['customerID'], axis=1)
         
-        # Make prediction
         X_processed = preprocessor.transform(df)
         prediction = model.predict(X_processed)[0]
         probability = model.predict_proba(X_processed)[0, 1]
@@ -201,20 +241,20 @@ def predict_churn_probability(customer_data):
         
     except Exception as e:
         st.error(f"Prediction error: {str(e)}")
-        # Fallback to mock prediction
         risk_score = np.random.uniform(0, 1)
         return risk_score, 1 if risk_score > 0.5 else 0
 
-# After imports
-import json
-from datetime import datetime
-
-# Add user session state for uploaded data
-if 'user_data' not in st.session_state:
-    st.session_state.user_data = None
-
 def calculate_business_impact(df, avg_customer_value=1000):
-    """Calculate detailed business impact metrics"""
+    """
+    Calculate detailed business impact metrics for customer churn.
+    
+    Args:
+        df (pd.DataFrame): DataFrame containing customer data and predictions
+        avg_customer_value (float): Average customer value for calculations
+        
+    Returns:
+        dict: Dictionary containing various business impact metrics
+    """
     impact = {
         'potential_loss': 0,
         'intervention_cost': 0,
@@ -229,7 +269,6 @@ def calculate_business_impact(df, avg_customer_value=1000):
     if isinstance(df, pd.Series):
         df = pd.DataFrame([df])
     
-    # Ensure required columns exist
     if 'churn_probability' not in df.columns:
         st.warning("Churn probability not available for business impact calculation")
         return impact
@@ -241,39 +280,37 @@ def calculate_business_impact(df, avg_customer_value=1000):
     high_risk = df['churn_probability'] > 0.7
     medium_risk = (df['churn_probability'] > 0.3) & (df['churn_probability'] <= 0.7)
     
-    # Calculate potential loss based on customer value and probability
+    # Calculate metrics
     impact['potential_loss'] = (df['MonthlyCharges'] * df['churn_probability'] * 12).sum()
-    
-    # Estimate intervention cost ($50 per high-risk customer, $20 per medium-risk customer)
     impact['intervention_cost'] = (high_risk.sum() * 50) + (medium_risk.sum() * 20)
     
-    # Calculate predicted ROI (assume 40% success rate in retention)
     if impact['intervention_cost'] > 0:
         impact['predicted_roi'] = (impact['potential_loss'] * 0.4) / impact['intervention_cost']
     
-    # Calculate at-risk revenue (annual)
     impact['at_risk_revenue'] = (df[high_risk]['MonthlyCharges'] * 12).sum() if high_risk.any() else 0
     
-    # Customer Lifetime Value (CLV) calculation
     if 'tenure' in df.columns:
         avg_tenure = df['tenure'].mean()
         impact['customer_lifetime_value'] = (df['MonthlyCharges'].mean() * avg_tenure).round(2)
     else:
-        impact['customer_lifetime_value'] = (df['MonthlyCharges'].mean() * 24).round(2)  # Assume 24 months
+        impact['customer_lifetime_value'] = (df['MonthlyCharges'].mean() * 24).round(2)
     
-    # Retention opportunity (potential savings from preventing churn)
     impact['retention_opportunity'] = impact['potential_loss'] - impact['intervention_cost']
-    
-    # Cost to acquire new customers (assume 5x monthly charges)
     impact['cost_to_acquire'] = (df[high_risk]['MonthlyCharges'] * 5).sum() if high_risk.any() else 0
-    
-    # Net retention value (retention opportunity minus acquisition cost)
     impact['net_retention_value'] = impact['retention_opportunity'] - impact['cost_to_acquire']
     
     return impact
 
 def get_retention_recommendations(customer_data):
-    """Generate targeted retention recommendations"""
+    """
+    Generate targeted retention recommendations based on customer data.
+    
+    Args:
+        customer_data (dict or pd.Series): Customer data including features and predictions
+        
+    Returns:
+        list: List of retention recommendations
+    """
     recommendations = []
     
     if isinstance(customer_data, pd.DataFrame):
@@ -315,7 +352,17 @@ def get_retention_recommendations(customer_data):
     return recommendations
 
 def calculate_intervention_timing(probability, tenure, charges):
-    """Calculate optimal intervention timing and approach"""
+    """
+    Calculate optimal intervention timing based on risk level and customer profile.
+    
+    Args:
+        probability (float): Churn probability
+        tenure (int): Customer tenure in months
+        charges (float): Monthly charges
+        
+    Returns:
+        str: Formatted intervention timing recommendation
+    """
     response = f"Based on: Risk Level: {probability:.1%}, Tenure: {tenure} months, Monthly Charges: ${charges:.2f}\n\n"
     
     if probability > 0.7:
@@ -340,26 +387,32 @@ def calculate_intervention_timing(probability, tenure, charges):
 
 @st.cache_data
 def log_prediction_feedback(_id, actual_churn, prediction_time):
-    """Log prediction feedback for continuous learning"""
+    """
+    Log prediction feedback for continuous learning.
+    
+    Args:
+        _id (str): Prediction ID
+        actual_churn (int): Actual churn outcome (0 or 1)
+        prediction_time (datetime): Time of prediction
+        
+    Returns:
+        bool: True if logging successful, False otherwise
+    """
     try:
-        # Get the current script directory and project root
         current_dir = os.path.dirname(os.path.abspath(__file__))
         project_root = os.path.dirname(current_dir)
         data_dir = os.path.join(project_root, 'data')
         
-        # Create data directory if it doesn't exist
         os.makedirs(data_dir, exist_ok=True)
         
         feedback_file = os.path.join(data_dir, 'prediction_feedback.json')
         
-        # Load existing feedback
         try:
             with open(feedback_file, 'r') as f:
                 feedback_data = json.load(f)
         except FileNotFoundError:
             feedback_data = []
         
-        # Add new feedback
         feedback_data.append({
             'prediction_id': _id,
             'timestamp': prediction_time,
@@ -367,7 +420,6 @@ def log_prediction_feedback(_id, actual_churn, prediction_time):
             'log_time': datetime.now().isoformat()
         })
         
-        # Save updated feedback
         with open(feedback_file, 'w') as f:
             json.dump(feedback_data, f)
         
@@ -377,7 +429,15 @@ def log_prediction_feedback(_id, actual_churn, prediction_time):
         return False
 
 def assess_prediction_quality(predictions_df):
-    """Assess the quality of predictions for continuous improvement"""
+    """
+    Assess the quality of predictions for continuous improvement.
+    
+    Args:
+        predictions_df (pd.DataFrame): DataFrame containing predictions
+        
+    Returns:
+        dict: Dictionary containing prediction quality metrics
+    """
     stats = {
         'total_predictions': len(predictions_df),
         'high_confidence_ratio': 0,
@@ -394,27 +454,22 @@ def assess_prediction_quality(predictions_df):
         if 'risk_category' in predictions_df.columns:
             stats['risk_distribution'] = predictions_df['risk_category'].value_counts().to_dict()
         
-        # Get the current script directory and project root
         current_dir = os.path.dirname(os.path.abspath(__file__))
         project_root = os.path.dirname(current_dir)
         data_dir = os.path.join(project_root, 'data')
         
-        # Create data directory if it doesn't exist
         os.makedirs(data_dir, exist_ok=True)
         
         stats_file = os.path.join(data_dir, 'prediction_stats.json')
         
-        # Load existing stats
         try:
             with open(stats_file, 'r') as f:
                 historical_stats = json.load(f)
         except FileNotFoundError:
             historical_stats = []
         
-        # Add new stats
         historical_stats.append(stats)
         
-        # Save updated stats
         with open(stats_file, 'w') as f:
             json.dump(historical_stats, f)
         
@@ -424,7 +479,10 @@ def assess_prediction_quality(predictions_df):
         return stats
 
 def collect_user_feedback():
-    """Collect user feedback on predictions and recommendations"""
+    """
+    Collect user feedback on predictions and recommendations.
+    Creates an interactive feedback form in the Streamlit interface.
+    """
     st.markdown("### 📝 Feedback Collection")
     
     col1, col2 = st.columns(2)
@@ -464,15 +522,12 @@ def collect_user_feedback():
                 'additional_feedback': additional_feedback
             }
             
-            # Get the current script directory and project root
             current_dir = os.path.dirname(os.path.abspath(__file__))
             project_root = os.path.dirname(current_dir)
             data_dir = os.path.join(project_root, 'data')
             
-            # Create data directory if it doesn't exist
             os.makedirs(data_dir, exist_ok=True)
             
-            # Save feedback
             feedback_file = os.path.join(data_dir, 'user_feedback.json')
             try:
                 with open(feedback_file, 'r') as f:
@@ -488,71 +543,6 @@ def collect_user_feedback():
             st.success("✅ Thank you for your feedback! It helps us improve our predictions.")
         except Exception as e:
             st.error(f"Error saving feedback: {str(e)}")
-
-# Update existing load_model function to cache last user data
-@st.cache_data
-def load_model():
-    """Load the trained model and preprocessor"""
-    try:
-        # Get the current script directory and project root
-        current_dir = os.path.dirname(os.path.abspath(__file__))
-        project_root = os.path.dirname(current_dir)
-        
-        # Construct absolute paths to model files
-        model_path = os.path.join(project_root, 'models', 'churn_model.joblib')
-        preprocessor_path = os.path.join(project_root, 'models', 'preprocessor.joblib')
-        
-        # Check if files exist
-        if not os.path.exists(model_path):
-            st.error(f"Model file not found at: {model_path}")
-            return None, None
-        if not os.path.exists(preprocessor_path):
-            st.error(f"Preprocessor file not found at: {preprocessor_path}")
-            return None, None
-        
-        model = joblib.load(model_path)
-        preprocessor = joblib.load(preprocessor_path)
-        
-        # If user data is available, include it in the preprocessor
-        if st.session_state.user_data is not None:
-            user_data = st.session_state.user_data
-            user_df = pd.DataFrame([user_data])
-            
-            # Feature Engineering for user data
-            user_df['TotalCharges'] = pd.to_numeric(user_df['TotalCharges'], errors='coerce')
-            user_df['TotalCharges'].fillna(user_df['MonthlyCharges'], inplace=True)
-            
-            user_df['tenure_group'] = pd.cut(user_df['tenure'], bins=[0, 12, 24, 48, float('inf')], 
-                                           labels=['New', 'Medium', 'Long', 'Very Long'])
-            
-            service_cols = ['OnlineSecurity', 'OnlineBackup', 'DeviceProtection', 
-                           'TechSupport', 'StreamingTV', 'StreamingMovies']
-            user_df['total_services'] = user_df[service_cols].apply(lambda x: (x == 'Yes').sum(), axis=1)
-            
-            user_df['avg_monthly_charges'] = user_df['TotalCharges'] / (user_df['tenure'] + 1)
-            user_df['charges_per_service'] = user_df['MonthlyCharges'] / (user_df['total_services'] + 1)
-            user_df['is_monthly_contract'] = (user_df['Contract'] == 'Month-to-month').astype(int)
-            user_df['is_electronic_payment'] = (user_df['PaymentMethod'] == 'Electronic check').astype(int)
-            user_df['high_risk_combo'] = ((user_df['Contract'] == 'Month-to-month') & 
-                                          (user_df['PaymentMethod'] == 'Electronic check')).astype(int)
-            
-            # Remove customerID for prediction
-            if 'customerID' in user_df.columns:
-                user_df = user_df.drop(['customerID'], axis=1)
-            
-            # Transform and predict for user data
-            X_user = preprocessor.transform(user_df)
-            user_prediction = model.predict(X_user)[0]
-            user_probability = model.predict_proba(X_user)[0, 1]
-            
-            # Update user data with prediction
-            st.session_state.user_data['churn_probability'] = user_probability
-            st.session_state.user_data['predicted_churn'] = user_prediction
-            
-        return model, preprocessor
-    except Exception as e:
-        st.error(f"Model loading error: {str(e)}")
-        return None, None
 
 # Main content based on selected page
 if page == "🏠 Home":
@@ -810,7 +800,7 @@ elif page == "📈 Batch Prediction":
             # Assess prediction quality for continuous learning
             try:
                 quality_stats = assess_prediction_quality(df)
-                st.info(f"📊 Prediction quality logged for model improvement")
+                st.info(f"Prediction quality logged for model improvement")
             except Exception as e:
                 st.warning(f"Could not log prediction quality: {str(e)}")
             
